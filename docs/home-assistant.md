@@ -22,8 +22,8 @@ aktuální stav je vždy čitelný zpět
 
 ### Počasí
 - weather.domov_2
-- input_number.weather_forecast_avg_6h
-- input_number.weather_forecast_trend
+- input_number.weather_forecast_avg_6h - Helper
+- input_number.weather_forecast_trend - Helper
 
 ### Komfort
 - sensor.nsblack_temperature
