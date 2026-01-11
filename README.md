@@ -45,12 +45,6 @@ respektuje fyziku domu a podlahovky
 
 maximalizuje využití levné elektřiny
 
-🧩 Architektura
-Spot ceny ─┐
-           ├─ Home Assistant ── MQTT ── nibepi / ESP ── Modbus ── NIBE
-Počasí  ───┘
-              ↑
-      monitoring (read-only)
 
 🔌 Komunikace s NIBE
 MQTT topic pro řízení
