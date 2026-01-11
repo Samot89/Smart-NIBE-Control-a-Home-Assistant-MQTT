@@ -39,9 +39,9 @@ Vyžaduje znalost Home Assistantu, MQTT a ekvitermní regulace.
 
 Používáš na vlastní odpovědnost.
 
-Je pořád ve fázi testování
+Je pořád ve fázi testování.
 
-Za případné nápady budu rád
+Za případné nápady budu rád.
 
 ---
 
