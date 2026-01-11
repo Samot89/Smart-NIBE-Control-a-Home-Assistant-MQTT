@@ -3,5 +3,5 @@
 ## MQTT topic
 
 ```text
-nibe/modbus/47011
+nibe/modbus/47011/set
 
