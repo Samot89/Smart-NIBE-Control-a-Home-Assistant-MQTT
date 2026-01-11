@@ -29,7 +29,7 @@ Projekt nahrazuje aktivní řízení v nibepi –
 - 🏠 [Home Assistant konfigurace](docs/home-assistant.md)
 - 🔧 [nibepi / Modbus bridge](docs/nibe-nibepi.md)
 - 📊 [Diagramy](docs/diagrams.md)
-
+- 📄 [FAG](docs/FAG.md)
 ---
 
 ## ⚠️ Upozornění
