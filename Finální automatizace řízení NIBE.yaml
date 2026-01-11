@@ -1,0 +1,101 @@
+alias: NIBE – Finalni offset (MQTT)
+description: >
+  Řízení topné křivky NIBE podle spot ceny,
+  predikce počasí a komfortu.
+mode: single
+
+trigger:
+  - platform: time_pattern
+    minutes: "1"
+
+condition:
+  - condition: state
+    entity_id: binary_sensor.hdo
+    state: "on"
+
+  - condition: template
+    value_template: >
+      {{ states('sensor.current_spot_electricity_price') not in ['unknown','unavailable'] }}
+
+  - condition: template
+    value_template: >
+      {{ states('input_number.weather_forecast_avg_6h') not in ['unknown','unavailable'] }}
+
+  - condition: template
+    value_template: >
+      {{ states('sensor.last_nibe_offset') not in ['unknown','unavailable'] }}
+
+action:
+  - variables:
+      cena: "{{ states('sensor.current_spot_electricity_price') | float }}"
+      t_out: "{{ state_attr('weather.domov_2','temperature') | float }}"
+      t_in: "{{ states('sensor.nsblack_temperature') | float }}"
+      trend: "{{ states('input_number.weather_forecast_trend') | float }}"
+      offset_current: "{{ states('sensor.last_nibe_offset') | float }}"
+      t_target: 21.5
+
+      offset_spot: "{{ (-0.8 * cena + 3.0) | round(1) }}"
+
+      bonus_6h: >
+        {% if is_state('sensor.spot_electricity_is_cheapest_6_hours_block','on') %}
+          0.7
+        {% else %}
+          0
+        {% endif %}
+
+      corr_outdoor: >
+        {% if t_out <= -10 %} 0.6
+        {% elif t_out <= -5 %} 0.4
+        {% elif t_out <= 0 %} 0.2
+        {% elif t_out <= 12 %} 0
+        {% else %} -0.4
+        {% endif %}
+
+      corr_trend: >
+        {% if trend <= -3 %} 0.6
+        {% elif trend <= -1.5 %} 0.4
+        {% elif trend <= -0.5 %} 0.2
+        {% elif trend >= 3 %} -0.6
+        {% elif trend >= 1.5 %} -0.4
+        {% elif trend >= 0.5 %} -0.2
+        {% else %} 0
+        {% endif %}
+
+      corr_indoor: >
+        {% set d = t_in - t_target %}
+        {% if d >= 1.0 %} -0.6
+        {% elif d >= 0.5 %} -0.3
+        {% elif d <= -1.0 %} 0.6
+        {% elif d <= -0.5 %} 0.3
+        {% else %} 0
+        {% endif %}
+
+      offset_calc: >
+        {{ (offset_spot + bonus_6h + corr_outdoor + corr_trend + corr_indoor) | round(1) }}
+
+      offset_final: >
+        {% if offset_calc > 4 %}
+          4
+        {% elif offset_calc < -3.5 %}
+          -3.5
+        {% else %}
+          {{ offset_calc }}
+        {% endif %}
+
+  - condition: template
+    value_template: >
+      {{ (offset_current - offset_final) | abs > 0.4 }}
+
+  - service: mqtt.publish
+    data:
+      topic: "nibe/modbus/47011/set"
+      payload: "{{ offset_final }}"
+      qos: 1
+      retain: true
+
+          
+          
+          
+          
+          
+          
