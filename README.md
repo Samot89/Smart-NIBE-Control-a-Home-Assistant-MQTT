@@ -38,8 +38,10 @@ Projekt není plug&play.
 Vyžaduje znalost Home Assistantu, MQTT a ekvitermní regulace.
 
 Používáš na vlastní odpovědnost.
-je pořád ve fázi testování
-za případné nápady budu rád
+
+Je pořád ve fázi testování
+
+Za případné nápady budu rád
 
 ---
 
