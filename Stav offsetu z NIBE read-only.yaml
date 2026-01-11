@@ -1,0 +1,13 @@
+template:
+  - sensor:
+      - name: "Last NIBE offset"
+        icon: mdi:chart-line
+        state: >
+          {{ states('number.teplotni_krivka_offset') | float }}
+          
+          
+          
+          
+          
+          
+          
