@@ -31,7 +31,7 @@ Projekt nahrazuje aktivní řízení v nibepi –
 - 📊 [Diagramy](docs/diagrams.md)
 - 📄 [FAG](docs/FAG.md)
 ---
-Nibepi projekt odkaz: https://github.com/anerdins/nibepi/blob/master/README.en.md 
+
 ## ⚠️ Upozornění
 
 Projekt není plug&play.  
