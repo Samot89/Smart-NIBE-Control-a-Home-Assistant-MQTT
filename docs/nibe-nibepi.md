@@ -1,4 +1,5 @@
 # 🔧 nibepi / Modbus bridge
+Odkaz na projekt Nibepi: https://github.com/anerdins/nibepi/blob/master/README.en.md
 
 ## Požadavky
 
