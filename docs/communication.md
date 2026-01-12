@@ -1,6 +1,6 @@
 # 🔌 Komunikace (MQTT / Modbus)
 
-## MQTT config
+## MQTT+conf.yaml config
 
 ```text
 
@@ -19,3 +19,12 @@ sensor:
   - name: Teplotní křivka Offset
     unique_id: a220223829
     state_topic: "nibe/modbus/47011"
+
+
+configuration.yaml
+
+- sensor:
+      - name: "Last NIBE offset"
+        state: >
+          {{ states('number.teplotni_krivka_offset') | float }}
+        icon: mdi:chart-line
