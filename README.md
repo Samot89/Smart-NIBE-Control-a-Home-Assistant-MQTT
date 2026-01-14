@@ -12,7 +12,7 @@ Projekt nahrazuje aktivní řízení v nibepi –
 
 ---
 
-## 📌 Hlavní vlastnosti
+# 📌 Hlavní vlastnosti
 
 - plynulá regulace topné křivky (Heat Offset S1 – Modbus 47011)
 - žádné zapínání / vypínání TČ
@@ -22,7 +22,7 @@ Projekt nahrazuje aktivní řízení v nibepi –
 
 ---
 
-## 📖 Dokumentace
+# 📖 Dokumentace
 
 - 🧠 [Architektura](docs/architecture.md)
 - 🔌 [Komunikace MQTT / Modbus](docs/communication.md)
@@ -30,7 +30,18 @@ Projekt nahrazuje aktivní řízení v nibepi –
 - 🔧 [nibepi / Modbus bridge](docs/nibe-nibepi.md)
 - 📊 [Diagramy](docs/diagrams.md)
 - 📄 [FAG](docs/FAG.md)
+
 ---
+# 🚀 Instalace
+1️⃣ Blueprint
+
+Zkopíruj soubor:
+
+blueprints/automation/smart_nibe_offset_adaptive_v2.yaml
+
+---
+
+a v HA dej Znovu načíst blueprinty.
 
 ## ⚠️ Upozornění
 
