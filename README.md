@@ -1,61 +1,51 @@
-# Smart NIBE Control via Home Assistant
+# Chytré řízení tepelného čerpadla NIBE přes Home Assistant (MQTT) Blueprint
 
-Řízení tepelného čerpadla **NIBE** pomocí **Home Assistantu** s využitím:
-- spotových cen elektřiny
-- predikce počasí
-- ekvitermní regulace
-- vnitřního komfortu
-- MQTT / nibepi (Modbus bridge)
-
-Projekt nahrazuje aktivní řízení v nibepi –  
-**Home Assistant je jediný řídicí mozek systému.**
+Adaptivní řízení offsetu topné křivky tepelného čerpadla NIBE pomocí
+Home Assistantu.  
+Navrženo pro spotové ceny elektřiny, předpověď počasí a stabilní vnitřní komfort
+– bez zapínání / vypínání kompresoru.
 
 ---
 
-# 📌 Hlavní vlastnosti
+## ✨ Funkce
 
-- plynulá regulace topné křivky (Heat Offset S1 – Modbus 47011)
-- žádné zapínání / vypínání TČ
-- optimalizace na cenu i počasí
-- stabilní chování pro podlahové topení
-- žádné konflikty regulátorů
-
----
-
-# 📖 Dokumentace
-
-- 🧠 [Architektura](docs/architecture.md)
-- 🔌 [Komunikace MQTT / Modbus](docs/communication.md)
-- 🏠 [Home Assistant konfigurace](docs/home-assistant.md)
-- 🔧 [nibepi / Modbus bridge](docs/nibe-nibepi.md)
-- 📊 [Diagramy](docs/diagrams.md)
-- 📄 [FAG](docs/FAG.md)
-
----
-# 🚀 Instalace
-1️⃣ Blueprint
-
-Zkopíruj soubor:
-
-blueprints/automation/smart_nibe_offset_adaptive_v2.yaml
+- Řízení **offsetu topné křivky** (Modbus registr 47011)
+- Reakce na **spotové ceny elektřiny**
+- Zohlednění **předpovědi počasí (trend)**
+- Korekce podle **vnitřní teploty**
+- **Dlouhodobé učení domu (bias)**
+- **Auto-tuning síly reakce**
+- Podpora **HDO**
+- Komunikace přes **MQTT / nibepi**
+- Plná transparentnost (debug & grafy)
 
 ---
 
-a v HA dej Znovu načíst blueprinty.
+## 🧠 Filozofie řízení
 
-## ⚠️ Upozornění
+- Home Assistant je **jediný mozek řízení**
+- Vnitřní regulace NIBE zůstává zachována
+- Neřídí se zapnutí/vypnutí TČ
+- Pouze **plynulá úprava topné křivky**
+- Optimalizováno pro **podlahové topení**
 
-Projekt není plug&play.  
-Vyžaduje znalost Home Assistantu, MQTT a ekvitermní regulace.
-
-Používáš na vlastní odpovědnost.
-
-Je pořád ve fázi testování.
-
-Za případné nápady budu rád.
+Tento projekt není „hack“, ale **nadřazený regulátor**.
 
 ---
 
-## 📜 Licence
+## 🏗 Architektura
 
-MIT – viz [LICENSE](LICENSE)
+```mermaid
+flowchart LR
+  Spot[Spotová cena]
+  Weather[Předpověď počasí]
+  Indoor[Vnitřní teplota]
+  HA[Home Assistant]
+  MQTT[MQTT / nibepi]
+  NIBE[NIBE TČ]
+
+  Spot --> HA
+  Weather --> HA
+  Indoor --> HA
+  HA --> MQTT
+  MQTT --> NIBE
