@@ -1,15 +1,18 @@
-# Chytré řízení tepelného čerpadla NIBE přes Home Assistant (MQTT) Blueprint
+# Chytré řízení tepelného čerpadla NIBE přes Home Assistant (MQTT) Blueprintu
 
-Adaptivní řízení offsetu topné křivky tepelného čerpadla NIBE pomocí
-Home Assistantu.  
-Navrženo pro spotové ceny elektřiny, předpověď počasí a stabilní vnitřní komfort
+Adaptivní řízení offsetu topné křivky tepelného čerpadla **NIBE** pomocí
+**Home Assistantu**.  
+Navrženo pro **spotové ceny elektřiny**, **předpověď počasí** a **stabilní vnitřní komfort**
 – bez zapínání / vypínání kompresoru.
+
+Tento projekt funguje jako **nadřazený regulátor**, který respektuje
+vnitřní logiku NIBE a pouze ji jemně koriguje.
 
 ---
 
 ## ✨ Funkce
 
-- Řízení **offsetu topné křivky** (Modbus registr 47011)
+- Řízení **offsetu topné křivky** (Modbus registr **47011**)
 - Reakce na **spotové ceny elektřiny**
 - Zohlednění **předpovědi počasí (trend)**
 - Korekce podle **vnitřní teploty**
@@ -25,11 +28,11 @@ Navrženo pro spotové ceny elektřiny, předpověď počasí a stabilní vnitř
 
 - Home Assistant je **jediný mozek řízení**
 - Vnitřní regulace NIBE zůstává zachována
-- Neřídí se zapnutí/vypnutí TČ
+- Neřídí se zapnutí / vypnutí TČ
 - Pouze **plynulá úprava topné křivky**
 - Optimalizováno pro **podlahové topení**
 
-Tento projekt není „hack“, ale **nadřazený regulátor**.
+Tento projekt **není hack**, ale **nadřazený adaptivní regulátor**.
 
 ---
 
