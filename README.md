@@ -63,8 +63,6 @@ Stáhni soubor blueprintu:
 
 smart_nibe_offset_adaptive_v2
 
-arduino
-Zkopírovat kód
 ---
 a ulož jej do adresáře:
 
