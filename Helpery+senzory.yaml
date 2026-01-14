@@ -1,0 +1,40 @@
+#🟢 Indoor bias (dlouhodobé učení domu)
+input_number:
+  indoor_bias:
+    name: Bias vnitřní teploty
+    min: -1.0
+    max: 1.0
+    step: 0.05
+    unit_of_measurement: "°C"
+#🟢 Response gain (síla reakce regulace)
+input_number:
+  indoor_response_gain:
+    name: Zesílení reakce regulace
+    min: 0.5
+    max: 1.5
+    step: 0.1
+#🟢 Trend předpovědi počasí	
+input_number:
+  weather_forecast_trend:
+    name: Trend počasí (např. 6h dopředu)
+    min: -10
+    max: 10
+    step: 0.1
+    unit_of_measurement: "°C"
+
+mqtt:
+  sensor:
+    - name: "NIBE Offset Debug"
+      state_topic: "nibe/debug/offset_calc"
+      value_template: "{{ value_json.final }}"
+      json_attributes_topic: "nibe/debug/offset_calc"
+
+
+template:
+  - sensor:
+      - name: "NIBE Offset – Spot"
+        state: "{{ state_attr('sensor.nibe_offset_debug','spot') }}"
+      - name: "NIBE Offset – Vnitřní korekce"
+        state: "{{ state_attr('sensor.nibe_offset_debug','indoor_corr') }}"
+      - name: "NIBE Offset – Bias"
+        state: "{{ state_attr('sensor.nibe_offset_debug','bias') }}"
