@@ -31,7 +31,7 @@ integrace spot: https://github.com/rnovacek/homeassistant_cz_energy_spot_prices
 - sensor.nsblack_temperature - vnitřní čidlo teploty
 
 ### Řízení
-- binary_sensor.hdo - senzor HDO
+- binary_sensor.hdo - senzor HDO volitelné
 - sensor.last_nibe_offset - stav aktu.offsetu template senzor
 
 ---
