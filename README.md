@@ -67,7 +67,7 @@ smart_nibe_offset_adaptive_v2
 a ulož jej do adresáře:
 
 /config/blueprints/automation/
-
+---
 3️⃣ Načtení Blueprintu v Home Assistantu
 
 Otevři Nastavení → Automatizace a scény → Blueprinty
@@ -76,7 +76,7 @@ Klikni na Znovu načíst blueprinty
 
 Ověř, že se v seznamu objeví:
 Smart NIBE – Ultra Adaptive (Winter + Ekviterm + Spot)
-
+---
 4️⃣ Vytvoření potřebných helperů
 
 Blueprint využívá několik helperů (input_number), které je nutné vytvořit
@@ -85,7 +85,7 @@ buď přes UI Home Assistantu, nebo vložením do YAML konfigurace.
 
 Hodnota trendu může být počítána automatizací nebo Node-REDem
 (např. rozdíl mezi aktuální a predikovanou venkovní teplotou).
-
+---
 5️⃣ Vytvoření automatizace z Blueprintu
 
 Otevři Nastavení → Automatizace → Vytvořit automatizaci
@@ -115,7 +115,7 @@ Current NIBE offset sensor – aktuální offset topné křivky
 MQTT topic – např. nibe/modbus/47011/set
 
 HDO sensor – volitelné (pokud není, lze ponechat prázdné)
-
+---
 6️⃣ Ověření funkce
 
 Po uložení automatizace doporučujeme:
