@@ -66,7 +66,7 @@ blueprint:
           step: 0.1
     max_offset:
       name: Max offset
-      default: 6
+      default: 6.0
       selector:
         number:
           min: 1
@@ -74,7 +74,7 @@ blueprint:
           step: 0.5
     min_offset:
       name: Min offset
-      default: -3
+      default: -3.0
       selector:
         number:
           min: -8
@@ -82,25 +82,20 @@ blueprint:
           step: 0.5
     min_change:
       name: Min offset change
-      default: 0.4
+      default: 0.2
       selector:
         number:
           min: 0.1
-          max: 2
+          max: 2.0
           step: 0.1
 
 trigger:
   - platform: time_pattern
-    minutes: "2" # Spustí se v 00:02, 01:02, 02:02... atd.
-
-condition:
-  - condition: template
-    value_template: >
-      {% set hdo_input = '!input hdo' %}
-      {{ hdo_input == 'none' or is_state(hdo_input, 'on') }}
+    minutes: "2"
 
 action:
   - variables:
+      hdo_entity: !input hdo
       spot_entity: !input spot_price
       cheap_entity: !input cheap_block
       weather_entity: !input outdoor_weather
@@ -114,7 +109,11 @@ action:
       min_offset_var: !input min_offset
       min_change_var: !input min_change
 
-      # Načtení hodnot
+  - condition: template
+    value_template: >
+      {{ hdo_entity == 'none' or is_state(hdo_entity, 'on') }}
+
+  - variables:
       cena: "{{ states(spot_entity) | float(0) }}"
       t_out: "{{ state_attr(weather_entity, 'temperature') | float(0) }}"
       t_in: "{{ states(indoor_entity) | float(target_temp_var) }}"
@@ -123,15 +122,11 @@ action:
       bias: "{{ states(bias_entity) | float(0) }}"
       gain_val: "{{ states(gain_entity) | float(1.2) }}"
       
-      # 1. ZÁKLADNÍ OFFSET DLE CENY A VENKOVNÍ TEPLOTY (Ekvitermní posun)
-      # Pokud je venku pod nulou, automaticky přidáváme k základu.
       ekvi_posun: "{{ (0 - t_out) / 10 if t_out < 5 else 0 }}"
-      offset_spot: "{{ (-0.8 * cena + 4.0 + ekvi_posun) | round(1) }}"
+      offset_spot: "{{ (-0.8 * cena + 4.0 + ekvi_posun) }}"
       
-      # 2. BONUS ZA LEVNÝ BLOK
       bonus_6h: "{% if is_state(cheap_entity, 'on') %} 1.0 {% else %} 0 {% endif %}"
       
-      # 3. KOREKCE DLE VNITŘNÍ TEPLOTY (Agresivní zimní režim)
       indoor_weight: >
         {% set t = trend | abs %}
         {% if t < 0.5 %} 1.5 {% elif t < 1.5 %} 1.2 {% else %} 0.9 {% endif %}
@@ -145,38 +140,35 @@ action:
         {% else %} 0
         {% endif %}
 
-      corr_indoor_final: "{{ (corr_indoor * indoor_weight * gain_val) | round(2) }}"
+      corr_indoor_final: "{{ (corr_indoor * indoor_weight * gain_val) }}"
       
-      # VÝSLEDNÝ VÝPOČET
+      # VÝPOČET NA 1 DESETINNÉ MÍSTO
       offset_calc: "{{ (offset_spot + bonus_6h | float + corr_indoor_final) | round(1) }}"
 
       # OMEZENÍ MANTINELY
       offset_final: >
-        {% if offset_calc | float > max_offset_var | float %} {{ max_offset_var }}
-        {% elif offset_calc | float < min_offset_var | float %} {{ min_offset_var }}
-        {% else %} {{ offset_calc }}
+        {% if offset_calc | float > max_offset_var | float %} {{ max_offset_var | float }}
+        {% elif offset_calc | float < min_offset_var | float %} {{ min_offset_var | float }}
+        {% else %} {{ offset_calc | float }}
         {% endif %}
 
-  # KONTROLA ZMĚNY (Ochrana EEPROM)
   - condition: template
     value_template: >
-      {% set diff = (offset_current - offset_final | float) | abs %}
+      {% set diff = (offset_current | float - offset_final | float) | abs %}
       {{ diff >= min_change_var | float }}
 
-  # LOGOVÁNÍ A ZÁPIS
   - service: mqtt.publish
     data:
       topic: "nibe/debug/offset_calc"
       payload: >
         {{
           {
-            "cas": now().strftime('%H:%M:%S'),
-            "venku": t_out,
+            "stav": "zapis_desetinna_cisla",
             "vnitrek": t_in,
-            "cena": cena,
-            "ekvi_posun": ekvi_posun | round(2),
-            "vypocteny_offset": offset_final | float,
-            "zapsano": "ano"
+            "venku": t_out,
+            "predchozi_offset": offset_current | float,
+            "novy_offset": offset_final | float,
+            "rozdil": (offset_current | float - offset_final | float) | abs | round(2)
           } | tojson
         }}
       retain: true
@@ -184,6 +176,6 @@ action:
   - service: mqtt.publish
     data:
       topic: !input mqtt_topic
-      payload: "{{ offset_final | float | int }}"
+      payload: "{{ offset_final | float }}"
 
 mode: single
