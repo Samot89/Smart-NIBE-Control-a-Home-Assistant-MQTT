@@ -1,141 +1,124 @@
 # Chytré řízení tepelného čerpadla NIBE přes Home Assistant (MQTT) Blueprintu
 
-Adaptivní řízení offsetu topné křivky tepelného čerpadla **NIBE** pomocí
-**Home Assistantu**.  
-Navrženo pro **spotové ceny elektřiny**, **předpověď počasí** a **stabilní vnitřní komfort**
-– bez zapínání / vypínání kompresoru.
+Tato automatizace (v2.9.2) je v podstatě **„mozek“ vašeho vytápění**.  
+Nedívá se pouze na venkovní teplotu, ale **kombinuje ekonomiku, fyziku domu
+a ochranu samotného tepelného čerpadla**.
 
-Tento projekt funguje jako **nadřazený regulátor**, který respektuje
-vnitřní logiku NIBE a pouze ji jemně koriguje.
+Cílem není jen ušetřit, ale **topit chytře, plynule a bezpečně**.
 
 ---
 
-## ✨ Funkce
+### 🔹 1️⃣ Ekvitermní základ (fyzika domu)
 
-- Řízení **offsetu topné křivky** (Modbus registr **47011**)
-- Reakce na **spotové ceny elektřiny**
-- Zohlednění **předpovědi počasí (trend)**
-- Korekce podle **vnitřní teploty**
-- **Dlouhodobé učení domu (bias)**
-- **Auto-tuning síly reakce**
-- Podpora **HDO**
-- Komunikace přes **MQTT / nibepi**
-- Plná transparentnost (debug & grafy)
+Automatizace nejprve vyhodnotí **aktuální venkovní teplotu**
+(`aktualni_venkovni_teplota`) a stanoví **základní potřebu tepla**.
 
----
+- čím větší mráz, tím vyšší základní offset
+- čím tepleji, tím nižší základ
+- dům se chová stabilně i při extrémních zimních podmínkách
 
-## 🧠 Filozofie řízení
-
-- Home Assistant je **jediný mozek řízení**
-- Vnitřní regulace NIBE zůstává zachována
-- Neřídí se zapnutí / vypnutí TČ
-- Pouze **plynulá úprava topné křivky**
-- Optimalizováno pro **podlahové topení**
-
-Tento projekt **není hack**, ale **nadřazený adaptivní regulátor**.
-
-## 🚀 Instalace Blueprintu
-
-Tato kapitola popisuje kompletní postup instalace a zprovoznění blueprintu
-pro chytré řízení tepelného čerpadla **NIBE** pomocí **Home Assistantu** a **MQTT**.
+Tento krok respektuje původní **ekvitermní filozofii NIBE**.
 
 ---
 
-### 1️⃣ Požadavky
+### 🔹 2️⃣ Spotová optimalizace (ekonomika)
 
-Před instalací se ujisti, že máš k dispozici:
+Na ekvitermní základ je aplikována **spotová logika** podle
+aktuální ceny elektřiny (`current_spot_electricity_price`):
 
-- funkční **Home Assistant**
-- běžící **MQTT broker** (např. Mosquitto)
-- komunikaci s NIBE přes:
-  - **nibepi**, nebo
-  - jiný **Modbus → MQTT bridge**
-- senzor **spotové ceny elektřiny** (OTE / Nordpool apod.)
-- senzor **vnitřní teploty**
-- entitu **počasí** (např. Open-Meteo)
-- (volitelně) binární senzor **HDO**
+- **levná elektřina** → offset se zvyšuje (předtápění, akumulace)
+- **drahá elektřina** → offset se snižuje (útlum výkonu)
+
+Dům je využíván jako **tepelný akumulátor** místo drahé elektřiny.
 
 ---
 
-### 2️⃣ Umístění souboru Blueprintu
+### 🔹 3️⃣ Předtopení – Look-ahead (předvídání)
 
-Stáhni soubor blueprintu:
+Automatizace se **dívá dopředu (cca 2 hodiny)**:
 
-smart_nibe_offset_adaptive_v2
+- pokud vidí, že cena elektřiny brzy vzroste o **více než ~30 %**
+- začne **zvyšovat offset už předem**
+
+Dům se tak „nabije“ teplem **ještě za levnou elektřinu**  
+a v drahých hodinách už jen pomalu chladne.
 
 ---
-a ulož jej do adresáře:
 
-/config/blueprints/automation/
+### 🔹 4️⃣ Vnitřní korekce – zpětná vazba (komfort)
+
+Automatizace neignoruje realitu uvnitř domu.
+
+Sleduje **vnitřní teplotu** (`nsblack_temperature`) a porovnává ji s cílem:
+
+- pokud je doma **tepleji než cílová teplota**
+  - offset se začne snižovat
+- pokud je doma **chladněji**
+  - offset se naopak zvýší
+
+To platí **i v případě levné elektřiny** –  
+komfort má vždy vyšší prioritu než slepé předtápění.
+
 ---
-3️⃣ Načtení Blueprintu v Home Assistantu
 
-Otevři Nastavení → Automatizace a scény → Blueprinty
+### 🔹 5️⃣ Solární brzda (využití slunce)
 
-Klikni na Znovu načíst blueprinty
+Pokud předpověď počasí hlásí **jasno / slunečno**:
 
-Ověř, že se v seznamu objeví:
-Smart NIBE – Ultra Adaptive (Winter + Ekviterm + Spot)
+- automatizace **sníží topný výkon**
+- počítá s tím, že:
+  - slunce dům zdarma ohřeje přes okna
+  - není nutné topit „na plno“
+
+Výsledkem je:
+- méně přetápění
+- lepší využití pasivních solárních zisků
+
 ---
-4️⃣ Vytvoření potřebných helperů
 
-Blueprint využívá několik helperů (input_number), které je nutné vytvořit
-buď přes UI Home Assistantu, nebo vložením do YAML konfigurace.
+### 🔹 6️⃣ Ochrana stupňominut – DM Guard (ochrana stroje)
 
+Automatizace **neustále sleduje stupňominuty** (`stupnove_minuty`):
 
-Hodnota trendu může být počítána automatizací nebo Node-REDem
-(např. rozdíl mezi aktuální a predikovanou venkovní teplotou).
+- pokud klesnou pod cca **-500**
+  - začne **omezovat další přidávání výkonu**
+- cílem je zabránit:
+  - pádu k -700
+  - sepnutí elektrické patrony
+
+Tím chrání:
+- kompresor
+- COP
+- životnost celého systému
+
 ---
-5️⃣ Vytvoření automatizace z Blueprintu
 
-Otevři Nastavení → Automatizace → Vytvořit automatizaci
+### 🔹 7️⃣ Plynulost změn – Slew Rate (mechanická ochrana)
 
-Zvol Vytvořit z blueprintu
+Automatizace **nedovolí skokové změny**:
 
-Vyber Smart NIBE – Ultra Adaptive (Winter + Ekviterm + Spot)
+- maximální změna offsetu je cca **±1.0 za hodinu**
+- žádné náhlé skoky
+- žádné šoky pro kompresor
 
-Vyplň jednotlivé vstupy:
+Výsledek:
+- stabilní stupňominuty
+- plynulý chod
+- dlouhá životnost TČ
 
-Spot price sensor – senzor spotové ceny elektřiny
-
-Cheapest 6h block sensor – binární senzor levného bloku
-
-Weather entity – entita počasí
-
-Indoor temperature sensor – senzor vnitřní teploty
-
-Forecast trend helper – input_number.weather_forecast_trend
-
-Indoor bias helper – input_number.indoor_bias
-
-Indoor response gain helper – input_number.indoor_response_gain
-
-Current NIBE offset sensor – aktuální offset topné křivky
-
-MQTT topic – např. nibe/modbus/47011/set
-
-HDO sensor – volitelné (pokud není, lze ponechat prázdné)
 ---
-6️⃣ Ověření funkce
 
-Po uložení automatizace doporučujeme:
+## 🧠 Shrnutí filozofie
 
-sledovat MQTT topic:
+> Automatizace netopí „víc“ ani „míň“.  
+> Topí **ve správný čas, správnou silou a z dobrého důvodu**.
 
-nibe/debug/offset_calc
+Spojuje:
+- **fyziku domu**
+- **ekonomiku spotového trhu**
+- **ochranu technologie**
 
-
-ověřit, že:
-
-offset se mění pouze při významné změně
-
-hodnota je vždy v nastavených mezích
-
-nedochází k častému přepisování (ochrana EEPROM)
-
-První 1–2 dny je vhodné systém pouze sledovat
-a teprve poté jemně ladit koeficienty.
-
+A dělá to **plynule, předvídavě a bez zbytečných zásahů**.
 
 
 ---
