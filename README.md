@@ -1,141 +1,143 @@
-# Chytré řízení tepelného čerpadla NIBE přes Home Assistant (MQTT) Blueprintu
+## 🧠 Jak automatizace funguje (FINAL v2.9.2)
 
-Tato automatizace (v2.9.2) je v podstatě **„mozek“ vašeho vytápění**.  
-Nedívá se pouze na venkovní teplotu, ale **kombinuje ekonomiku, fyziku domu
-a ochranu samotného tepelného čerpadla**.
+Tato automatizace (v2.9.2) funguje jako **centrální „mozek“ vytápění**.
+Nedívá se pouze na jednu veličinu, ale **kombinuje ekonomiku, fyziku domu,
+komfort uživatelů a ochranu samotného tepelného čerpadla**.
 
-Cílem není jen ušetřit, ale **topit chytře, plynule a bezpečně**.
+Cílem není maximalizovat výkon ani slepě šetřit,
+ale **topit ve správný čas, správnou silou a bez zbytečného opotřebení**.
 
 ---
 
 ### 🔹 1️⃣ Ekvitermní základ (fyzika domu)
 
-Automatizace nejprve vyhodnotí **aktuální venkovní teplotu**
-(`aktualni_venkovni_teplota`) a stanoví **základní potřebu tepla**.
+Základ řízení vychází z **venkovní teploty** (`outdoor_weather.temperature`).
 
-- čím větší mráz, tím vyšší základní offset
-- čím tepleji, tím nižší základ
-- dům se chová stabilně i při extrémních zimních podmínkách
+- při poklesu venkovní teploty se automaticky zvyšuje základní offset
+- při mírných teplotách se topný výkon přirozeně snižuje
+- systém respektuje původní **ekvitermní filozofii NIBE**
 
-Tento krok respektuje původní **ekvitermní filozofii NIBE**.
+To zajišťuje stabilní chování domu i při silných mrazech.
 
 ---
 
 ### 🔹 2️⃣ Spotová optimalizace (ekonomika)
 
-Na ekvitermní základ je aplikována **spotová logika** podle
-aktuální ceny elektřiny (`current_spot_electricity_price`):
+Na ekvitermní základ je aplikována **spotová logika** podle aktuální ceny elektřiny
+(`spot_price`):
 
-- **levná elektřina** → offset se zvyšuje (předtápění, akumulace)
-- **drahá elektřina** → offset se snižuje (útlum výkonu)
+- **levná elektřina** → zvýšení offsetu (akumulace tepla)
+- **drahá elektřina** → snížení offsetu (útlum výkonu)
 
-Dům je využíván jako **tepelný akumulátor** místo drahé elektřiny.
-
----
-
-### 🔹 3️⃣ Předtopení – Look-ahead (předvídání)
-
-Automatizace se **dívá dopředu (cca 2 hodiny)**:
-
-- pokud vidí, že cena elektřiny brzy vzroste o **více než ~30 %**
-- začne **zvyšovat offset už předem**
-
-Dům se tak „nabije“ teplem **ještě za levnou elektřinu**  
-a v drahých hodinách už jen pomalu chladne.
+Dům je tak využíván jako **tepelný akumulátor** místo drahé elektřiny.
 
 ---
 
-### 🔹 4️⃣ Vnitřní korekce – zpětná vazba (komfort)
+### 🔹 3️⃣ Předtopení – Look-ahead (predikce ceny)
 
-Automatizace neignoruje realitu uvnitř domu.
+Automatizace se **dívá cca 2 hodiny dopředu** do budoucích cen elektřiny.
 
-Sleduje **vnitřní teplotu** (`nsblack_temperature`) a porovnává ji s cílem:
+- pokud vidí, že cena brzy vzroste o více než ~30 %
+- a aktuální cena je stále relativně nízká
+- aktivuje **předtopení**
 
-- pokud je doma **tepleji než cílová teplota**
-  - offset se začne snižovat
-- pokud je doma **chladněji**
-  - offset se naopak zvýší
+Dům se „nabije“ teplem **ještě před zdražením**,
+čímž se sníží nutnost topit v drahých hodinách.
 
-To platí **i v případě levné elektřiny** –  
-komfort má vždy vyšší prioritu než slepé předtápění.
+Současně je implementována ochrana proti chybám dat
+(výpadek nebo nekompletní cenová křivka).
 
 ---
 
-### 🔹 5️⃣ Solární brzda (využití slunce)
+### 🔹 4️⃣ Solární brzda (pasivní zisky)
 
-Pokud předpověď počasí hlásí **jasno / slunečno**:
+Pokud aktuální stav počasí indikuje **jasno / slunečno**
+v denních hodinách:
 
-- automatizace **sníží topný výkon**
-- počítá s tím, že:
-  - slunce dům zdarma ohřeje přes okna
-  - není nutné topit „na plno“
+- automatizace **snižuje topný výkon**
+- počítá s pasivními solárními zisky přes okna
 
 Výsledkem je:
 - méně přetápění
-- lepší využití pasivních solárních zisků
+- lepší využití „energie zdarma“
 
 ---
 
-### 🔹 6️⃣ Ochrana stupňominut – DM Guard (ochrana stroje)
+### 🔹 5️⃣ Vnitřní korekce – zpětná vazba (komfort)
 
-Automatizace **neustále sleduje stupňominuty** (`stupnove_minuty`):
+Automatizace neignoruje realitu uvnitř domu.
 
-- pokud klesnou pod cca **-500**
-  - začne **omezovat další přidávání výkonu**
+Sleduje **vnitřní teplotu** (`indoor_temp`) a porovnává ji s cílem:
+
+- pokud je doma tepleji → offset se snižuje
+- pokud je doma chladněji → offset se zvyšuje
+
+Korekce:
+- je zesílena pomocí **response gain**
+- dlouhodobě posunuta pomocí **indoor bias**
+- nikdy nepřebíjí fyziku domu ani ochranné limity
+
+Komfort má vždy vyšší prioritu než slepé předtápění.
+
+---
+
+### 🔹 6️⃣ Ochrana stupňominut – DM Guard
+
+Automatizace **neustále hlídá stupňominuty** (`degree_minutes`):
+
+- při hlubokém poklesu (např. pod −500)
+  - se omezuje rychlost zvyšování výkonu
 - cílem je zabránit:
-  - pádu k -700
+  - pádu k −700
   - sepnutí elektrické patrony
 
-Tím chrání:
-- kompresor
-- COP
-- životnost celého systému
+Tato ochrana výrazně přispívá k:
+- lepšímu COP
+- ochraně kompresoru
+- delší životnosti systému
 
 ---
 
 ### 🔹 7️⃣ Plynulost změn – Slew Rate (mechanická ochrana)
 
-Automatizace **nedovolí skokové změny**:
+Automatizace **nikdy nemění offset skokově**:
 
-- maximální změna offsetu je cca **±1.0 za hodinu**
-- žádné náhlé skoky
-- žádné šoky pro kompresor
+- maximální změna je omezená na cca ±1.0 za hodinu
+- při kritických stavech ještě méně
+- žádné náhlé skoky, žádné šoky
 
-Výsledek:
+Tím se udržují:
 - stabilní stupňominuty
-- plynulý chod
-- dlouhá životnost TČ
+- plynulý chod kompresoru
+- klidné chování celé soustavy
+
+---
+
+### 🔹 8️⃣ Ochrana zápisů a transparentnost
+
+Zápis do NIBE proběhne pouze tehdy, když:
+
+- změna offsetu je větší než nastavený práh (`min_change`)
+- HDO (pokud je použito) dovoluje provoz
+
+Každý zásah je zároveň **logován přes MQTT** (`nibe/debug/offset_calc`),
+což umožňuje:
+
+- zpětnou analýzu
+- ladění
+- prokazování přínosu regulace
 
 ---
 
 ## 🧠 Shrnutí filozofie
 
-> Automatizace netopí „víc“ ani „míň“.  
-> Topí **ve správný čas, správnou silou a z dobrého důvodu**.
+> Tato automatizace netopí „víc“ ani „míň“.  
+> Topí **chytře, plynule a s ohledem na budoucnost**.
 
 Spojuje:
-- **fyziku domu**
-- **ekonomiku spotového trhu**
-- **ochranu technologie**
+- fyziku domu  
+- ekonomiku spotového trhu  
+- komfort obyvatel  
+- ochranu technologie  
 
-A dělá to **plynule, předvídavě a bez zbytečných zásahů**.
-
-
----
-
-## 🏗 Architektura
-
-```mermaid
-flowchart LR
-  Spot[Spotová cena]
-  Weather[Předpověď počasí]
-  Indoor[Vnitřní teplota]
-  HA[Home Assistant]
-  MQTT[MQTT / nibepi]
-  NIBE[NIBE TČ]
-
-  Spot --> HA
-  Weather --> HA
-  Indoor --> HA
-  HA --> MQTT
-  MQTT --> NIBE
+a dělá to **bez hysterických zásahů a bez zbytečného opotřebení**.
