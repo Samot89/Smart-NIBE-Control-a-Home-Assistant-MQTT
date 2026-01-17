@@ -1,0 +1,32 @@
+alias: Weather - Update forecast values
+triggers:
+  - minutes: "0"
+    trigger: time_pattern
+actions:
+  - target:
+      entity_id:
+        - weather.domov_2
+    data:
+      type: hourly
+    response_variable: forecast_data
+    action: weather.get_forecasts
+  - variables:
+      t_now: "{{ state_attr('weather.domov_2','temperature') | float(0) }}"
+      t_avg_6h: >
+        {% set f = forecast_data['weather.domov_2'].forecast[0:6] %} {% if f is
+        defined and f | length > 0 %}
+          {{ (f | map(attribute='temperature') | list | average) | round(1) }}
+        {% else %}
+          {{ t_now }}
+        {% endif %}
+  - target:
+      entity_id: input_number.weather_forecast_avg_6h
+    data:
+      value: "{{ t_avg_6h }}"
+    action: input_number.set_value
+  - target:
+      entity_id: input_number.weather_forecast_trend
+    data:
+      value: "{{ (t_avg_6h - t_now) | round(1) }}"
+    action: input_number.set_value
+mode: single
