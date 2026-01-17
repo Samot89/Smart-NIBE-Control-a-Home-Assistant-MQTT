@@ -141,3 +141,27 @@ Spojuje:
 - ochranu technologie  
 
 a dělá to **bez hysterických zásahů a bez zbytečného opotřebení**.
+```mermaid
+flowchart TD
+    A[Start – každou hodinu + 2 min] --> B[Načtení vstupních dat]
+    B --> C{Platná data?}
+    C -- ne --> Z[Použij aktuální stav<br/>bez agresivní změny]
+    C -- ano --> D[Ekvitermní základ]
+
+    D --> E[Spotová optimalizace]
+    E --> F{Cena poroste > 30 %?}
+    F -- ano --> G[Předtopení]
+    F -- ne --> H[Bez předtopení]
+
+    G --> I
+    H --> I
+
+    I[Solární brzda] --> J[Vnitřní korekce]
+    J --> K[DM Guard]
+    K --> L[Clamping]
+    L --> M[Slew Rate]
+
+    M --> N{Změna > min_change?}
+    N -- ne --> O[Nezapisuj]
+    N -- ano --> P[MQTT zápis<br/>47011]
+
