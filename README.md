@@ -1,6 +1,6 @@
 ## 🧠 Jak automatizace funguje (FINAL v2.9.3)
 
-Tato automatizace (v2.9.2) funguje jako **centrální „mozek“ vytápění**.
+Tato automatizace (v2.9.3) funguje jako **centrální „mozek“ vytápění**.
 Nedívá se pouze na jednu veličinu, ale **kombinuje ekonomiku, fyziku domu,
 komfort uživatelů a ochranu samotného tepelného čerpadla**.
 
