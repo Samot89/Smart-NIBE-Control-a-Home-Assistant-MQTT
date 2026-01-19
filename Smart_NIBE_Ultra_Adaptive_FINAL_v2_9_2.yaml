@@ -181,7 +181,7 @@ action:
   - condition: template
     value_template: "{{ (off_curr | int - offset_final | int) | abs >= min_change_limit | int }}"
 
-  - service: mqtt.publish
+ - service: mqtt.publish
     data:
       topic: !input mqtt_topic
       payload: "{{ offset_final | int }}"
@@ -190,14 +190,28 @@ action:
     data:
       topic: "nibe/debug/offset_calc"
       payload: >
+        {% set vliv_spotu = (-0.8 * cena_ted + 4.0) | round(2) %}
+        {% set vliv_indoor = (corr_indoor * gain_val) | round(2) %}
         {{
           {
-            "stav": "zapis_integer",
-            "vypocet_surovy": raw_calc | round(2),
-            "vysledek_poslany_do_nibe": offset_final | int,
-            "stupnominuty": dm_val
+            "celkovy_offset_integ": offset_final | int,
+            "surovy_vypocet_float": raw_calc | round(2),
+            "stupnominuty": dm_val | int,
+            "slozky": {
+              "zaklad_ekviterm": ekvi_posun | round(2),
+              "vliv_ceny_spot": vliv_spotu,
+              "preheat_bonus": preheat_bonus,
+              "solar_malus": solar_malus,
+              "vnitrni_korekce": vliv_indoor,
+              "bonus_6h_blok": bonus_6h | float
+            },
+            "ceny": {
+              "aktualni": cena_ted | round(2),
+              "za_2h": cena_budoucich | round(2)
+            }
           } | tojson
         }}
       retain: true
 
 mode: single
+
