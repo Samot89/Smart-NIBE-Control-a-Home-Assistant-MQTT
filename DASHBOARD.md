@@ -1,8 +1,8 @@
 # 📊 Smart NIBE Dashboard – Přehled Automatizace
 
 ## 🎯 Základní Info
-- **Verze:** Ultra Adaptive FINAL v2.9.5
-- **Spouštěč:** Každé 2 minuty (time_pattern)
+- **Verze:** Ultra Adaptive FINAL 
+- **Spouštěč:** Každé 2 minuty po celé hodině (time_pattern)
 - **Režim:** Single (jeden běh najednou)
 
 ---
@@ -295,7 +295,7 @@ cards:
 
 4. **Max/Min Offset**
    - Omez podle možností systému
-   - Default: 6 / -3
+   - Default: 4 / -3
 
 ### Řešení problémů:
 
@@ -327,8 +327,9 @@ cards:
 ## 🔗 Reference
 
 - **GitHub:** https://github.com/Samot89/Smart-NIBE-Control-a-Home-Assistant-MQTT.git
-- **Blueprint:** [smart_nibe_offset_adaptive_v2.yaml](smart_nibe_offset_adaptive_v2.yaml)
+- **Blueprint:** https://community.home-assistant.io/t/smart-nibe-ultra-adaptive-heat-curve-control-mqtt-spot-prices/975863
 
 ---
 
 *Poslední aktualizace: 22. ledna 2026*
+
