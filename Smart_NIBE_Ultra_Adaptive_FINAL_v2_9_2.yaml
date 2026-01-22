@@ -1,7 +1,7 @@
 blueprint:
-  name: Smart NIBE – Ultra Adaptive FINAL v2.9.3 (Celá čísla)
-  description: https://github.com/Samot89/Smart-NIBE-Control-a-Home-Assistant-MQTT.git
-                Všechny výpočty jsou na konci zaokrouhleny na celé číslo.
+  name: Smart NIBE – Ultra Adaptive FINAL (Celá čísla)
+  description: Adaptivní řízení offsetu tepelného čerpadla NIBE na základě spotových cen elektřiny, počasí, vnitřních podmínek a předpovědí. Všechny výpočty zaokrouhleny na celá čísla.
+                https://github.com/Samot89/Smart-NIBE-Control-a-Home-Assistant-MQTT.git
   domain: automation
   input:
     # ... (inputy zůstávají stejné)
@@ -93,6 +93,15 @@ blueprint:
           min: 1
           max: 5
           step: 1
+    look_ahead_hours:
+      name: Hodiny dopředu
+      description: Hodiny dopředu pro předpověď ceny (výchozí 2)
+      default: 2
+      selector:
+        number:
+          min: 1
+          max: 6
+          step: 1
 
 trigger:
   - platform: time_pattern
@@ -114,6 +123,8 @@ action:
       max_off_limit: !input max_offset
       min_off_limit: !input min_offset
       min_change_limit: !input min_change
+      look_ahead: !input look_ahead_hours
+      trend_val: "{{ states(trend_ent) | float(0) }}"
       
       t_out: "{{ state_attr(weather_ent, 'temperature') | float(0) }}"
       t_in: "{{ states(in_temp_ent) | float(target_temp_var) }}"
@@ -121,21 +132,48 @@ action:
       off_curr: "{{ states(curr_off_ent) | int(0) }}"
       cena_ted: "{{ states(spot_ent) | float(0) }}"
       stav_pocasi: "{{ states(weather_ent) }}"
-
+      humidity: "{{ state_attr(weather_ent, 'humidity') | float(50) }}"
+      
       # 1. LOOK-AHEAD (Předtopení)
       h_index: "{{ now().hour }}"
       today_prices: "{{ state_attr(spot_ent, 'today') }}"
       cena_budoucich: >
-        {% if today_prices is iterable and today_prices | length > (h_index + 2) %}
-          {{ today_prices[h_index + 2] | float(cena_ted) }}
+        {% if today_prices is iterable and today_prices | length > (h_index + look_ahead) %}
+          {{ today_prices[h_index + look_ahead] | float(cena_ted) }}
         {% else %}
           {{ cena_ted }}
         {% endif %}
       
       preheat_bonus: "{{ 1.5 if (cena_budoucich > (cena_ted * 1.3) and cena_ted < 2.5) else 0.0 }}"
 
-      # 2. SOLAR
-      solar_malus: "{{ -1.0 if (stav_pocasi == 'sunny' and 8 <= now().hour <= 16) else 0.0 }}"
+      # 2. SOLAR & WEATHER
+      solar_malus: >
+        {% set state = stav_pocasi %}
+        {% set clear_states = ['sunny', 'clear', 'clear-night', 'clear_night'] %}
+        {% set partial_states = ['partlycloudy', 'partly cloudy', 'partly_cloudy', 'mostlycloudy', 'mostly_cloudy'] %}
+        {% if 9 <= now().hour <= 15 %}
+          {% if state in clear_states %} -1.0
+          {% elif state in partial_states %} -0.5
+          {% else %} 0.0
+          {% endif %}
+        {% else %} 0.0
+        {% endif %}
+      rain_bonus: >
+        {% set state = stav_pocasi %}
+        {% set heavy = ['pouring', 'lightning-rainy', 'lightning_rainy', 'hail'] %}
+        {% set light = ['rainy', 'rain', 'light_rain', 'snow', 'sleet'] %}
+        {% if state in heavy %} 1.0
+        {% elif state in light %} 0.5
+        {% else %} 0
+        {% endif %}
+      humidity_bonus: "{{ 0.5 if humidity > 80 and t_out < 10 else 0.0 }}"
+      forecast_bonus: >
+        {% set t = trend_val %}
+        {% set lin = (t * -0.4) %}
+        {% if lin > 1 %} 1
+        {% elif lin < -1 %} -1
+        {% else %} {{ lin | round(2) }}
+        {% endif %}
 
       # 3. ZÁKLADNÍ VÝPOČET
       ekvi_posun: "{{ (0 - t_out) / 10 if t_out < 5 else 0 }}"
@@ -153,11 +191,11 @@ action:
         {% endif %}
 
       # Surový součet všech vlivů
-      raw_calc: "{{ ((-0.8 * cena_ted) + 4.0 + ekvi_posun + (bonus_6h | float) + (corr_indoor * gain_val) + preheat_bonus + solar_malus) }}"
+      raw_calc: "{{ ((-0.8 * cena_ted) + 4.0 + ekvi_posun + (bonus_6h | float) + (corr_indoor * gain_val) + preheat_bonus + solar_malus + rain_bonus + humidity_bonus + forecast_bonus) }}"
 
       # 4. DM GUARD & CLAMPING
-      # Pro celá čísla povolíme krok max 1 stupeň
-      max_step: "{{ 1 if dm_val < -500 else 2 }}"
+      # Při velmi záporných stupňominutách omez krok na 1
+      max_step: "{{ 1 if dm_val < -800 else 2 }}"
       
       clamped_calc: >
         {% set val = raw_calc | float %}
@@ -179,9 +217,12 @@ action:
     value_template: "{{ hdo_ent == 'none' or is_state(hdo_ent, 'on') }}"
 
   - condition: template
+    value_template: "{{ states(spot_ent) != 'unavailable' and states(weather_ent) != 'unavailable' and states(dm_ent) != 'unavailable' and states(in_temp_ent) != 'unavailable' and states(curr_off_ent) != 'unavailable' }}"
+
+  - condition: template
     value_template: "{{ (off_curr | int - offset_final | int) | abs >= min_change_limit | int }}"
 
- - service: mqtt.publish
+  - service: mqtt.publish
     data:
       topic: !input mqtt_topic
       payload: "{{ offset_final | int }}"
@@ -194,24 +235,38 @@ action:
         {% set vliv_indoor = (corr_indoor * gain_val) | round(2) %}
         {{
           {
-            "celkovy_offset_integ": offset_final | int,
-            "surovy_vypocet_float": raw_calc | round(2),
+            "verze": "2.9.5",
+            "celkovy_offset": offset_final | int,
+            "surovy_vypocet": raw_calc | round(2),
             "stupnominuty": dm_val | int,
             "slozky": {
               "zaklad_ekviterm": ekvi_posun | round(2),
               "vliv_ceny_spot": vliv_spotu,
               "preheat_bonus": preheat_bonus,
               "solar_malus": solar_malus,
+              "rain_bonus": rain_bonus,
+              "humidity_bonus": humidity_bonus,
+              "forecast_bonus": forecast_bonus,
               "vnitrni_korekce": vliv_indoor,
               "bonus_6h_blok": bonus_6h | float
             },
             "ceny": {
               "aktualni": cena_ted | round(2),
-              "za_2h": cena_budoucich | round(2)
+              "za_2h": cena_budoucich | round(2),
+              "prvni_3h": (today_prices[:3] if today_prices is iterable else []) | list
+            },
+            "teploty": {
+              "venkovni": t_out,
+              "vnitrni": t_in,
+              "cilova": target_temp_var
+            },
+            "pocasi": {
+              "stav": stav_pocasi,
+              "vlhkost": humidity,
+              "trend_6h": trend_val
             }
           } | tojson
         }}
       retain: true
 
 mode: single
-
