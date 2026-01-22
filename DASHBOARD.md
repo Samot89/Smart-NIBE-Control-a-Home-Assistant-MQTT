@@ -173,7 +173,6 @@ Jinak:
 - **Topic:** `nibe/debug/offset_calc`
 - **Retain:** true
 - **Obsah:**
-  - Verze (2.9.5)
   - Celkový offset
   - Surový výpočet
   - Stupňominuty
@@ -316,7 +315,7 @@ cards:
 
 ## 📝 Changelog
 
-### v2.9.5 (Aktuální)
+### 
 - Všechny výpočty zaokrouhleny na celá čísla
 - DM Guard pro ochranu při extrémních stupňominutách
 - Rozšířené debug info v MQTT
@@ -332,4 +331,5 @@ cards:
 ---
 
 *Poslední aktualizace: 22. ledna 2026*
+
 
