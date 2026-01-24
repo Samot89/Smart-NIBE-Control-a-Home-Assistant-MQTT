@@ -39,7 +39,7 @@ This is **not a hack** — it is a *layer above* the manufacturer’s logic.
 
 ---
 
-## 🔄 How the Automation Works (FINAL v2.9.2)
+## 🔄 How the Automation Works (FINAL v2.9.5)
 
 This automation acts as the **central decision engine** for heating.
 It combines **economics, building physics, comfort feedback, and hardware protection**.
