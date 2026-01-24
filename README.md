@@ -218,4 +218,5 @@ Tento projekt je licencován pod licencí MIT - viz soubor [LICENSE](LICENSE) pr
 - NIBE za poskytnutí Modbus přístupu k tepelným čerpadlům
 - [nibepi projekt](https://github.com/anerdins/nibepi) za MQTT-Modbus bridge
 - Home Assistant komunita za integrace a podporu
+- [Import Blueprint](https://community.home-assistant.io/t/smart-nibe-ultra-adaptive-heat-curve-control-mqtt-spot-prices/975863)
 
