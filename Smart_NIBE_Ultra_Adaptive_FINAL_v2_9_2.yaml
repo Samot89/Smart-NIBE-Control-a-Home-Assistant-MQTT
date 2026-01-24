@@ -1,5 +1,5 @@
 blueprint:
-  name: Smart NIBE – Ultra Adaptive FINAL (Celá čísla)
+  name: Smart NIBE – Ultra Adaptive (Winter + Ekviterm + Spot) 
   description: Adaptivní řízení offsetu tepelného čerpadla NIBE na základě spotových cen elektřiny, počasí, vnitřních podmínek a předpovědí. Všechny výpočty zaokrouhleny na celá čísla.
                 https://github.com/Samot89/Smart-NIBE-Control-a-Home-Assistant-MQTT.git
   domain: automation
