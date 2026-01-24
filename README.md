@@ -1,6 +1,6 @@
 ## 🧠 Jak automatizace funguje FINAL 
 
-Tato automatizace (v2.9.3) funguje jako **centrální „mozek“ vytápění**.
+Tato automatizace (v2.9.5) funguje jako **centrální „mozek“ vytápění**.
 Nedívá se pouze na jednu veličinu, ale **kombinuje ekonomiku, fyziku domu,
 komfort uživatelů a ochranu samotného tepelného čerpadla**.
 
@@ -164,4 +164,58 @@ flowchart TD
     M --> N{Změna > min_change?}
     N -- ne --> O[Nezapisuj]
     N -- ano --> P[MQTT zápis<br/>47011]
+
+```
+
+---
+
+## 📚 Dokumentace
+
+Pro detailní informace prosím nahlédněte do následující dokumentace:
+
+- **[FAQ](docs/FAQ.md)** - Často kladené otázky
+- **[Architektura](docs/architecture.md)** - Přehled architektury systému
+- **[Komunikace](docs/communication.md)** - Detaily MQTT a Modbus komunikace
+- **[Diagramy](docs/diagrams.md)** - Diagramy systému
+- **[Home Assistant](docs/home-assistant.md)** - Konfigurace Home Assistant
+- **[NIBE / nibepi](docs/nibe-nibepi.md)** - Nastavení NIBE tepelného čerpadla a nibepi
+- **[Dashboard](DASHBOARD.md)** - Nastavení a konfigurace dashboardu
+- **[Helpery](Helpery.md)** - Pomocné entity a jejich použití
+
+---
+
+## 📋 Požadavky
+
+- Tepelné čerpadlo NIBE (F-série)
+- Home Assistant
+- MQTT broker
+- nibepi nebo kompatibilní Modbus-MQTT bridge
+- Integrace spotových cen elektřiny
+- Integrace počasí (např. Open-Meteo)
+- Čidlo vnitřní teploty
+
+---
+
+## 🚀 Instalace
+
+1. Nainstalujte automatizační blueprint v Home Assistantu
+2. Nakonfigurujte požadované entity (spotová cena, počasí, senzory)
+3. Nastavte helper entity (input_number helpery)
+4. Nakonfigurujte MQTT témata pro váš nibepi/bridge
+5. Upravte parametry podle charakteristik vašeho domu
+6. Monitorujte a dolaďte po několik dní
+
+---
+
+## ⚖️ Licence
+
+Tento projekt je licencován pod licencí MIT - viz soubor [LICENSE](LICENSE) pro detaily.
+
+---
+
+## 🙏 Poděkování
+
+- NIBE za poskytnutí Modbus přístupu k tepelným čerpadlům
+- [nibepi projekt](https://github.com/anerdins/nibepi) za MQTT-Modbus bridge
+- Home Assistant komunita za integrace a podporu
 

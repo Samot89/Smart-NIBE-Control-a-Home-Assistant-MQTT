@@ -39,7 +39,7 @@ This is **not a hack** — it is a *layer above* the manufacturer’s logic.
 
 ---
 
-## 🔄 How the Automation Works (FINAL v2.9.2)
+## 🔄 How the Automation Works (FINAL v2.9.5)
 
 This automation acts as the **central decision engine** for heating.
 It combines **economics, building physics, comfort feedback, and hardware protection**.
@@ -224,3 +224,57 @@ flowchart TD
     N -- yes --> P[MQTT write<br/>Modbus 47011]
 
     P --> Q[MQTT debug log]
+```
+
+---
+
+## 📚 Documentation
+
+For detailed information, please refer to the following documentation:
+
+- **[FAQ](docs/FAQ.md)** - Frequently Asked Questions
+- **[Architecture](docs/architecture.md)** - System architecture overview
+- **[Communication](docs/communication.md)** - MQTT and Modbus communication details
+- **[Diagrams](docs/diagrams.md)** - System diagrams
+- **[Home Assistant](docs/home-assistant.md)** - Home Assistant configuration details
+- **[NIBE / nibepi](docs/nibe-nibepi.md)** - NIBE heat pump and nibepi bridge setup
+- **[Dashboard](DASHBOARD.md)** - Dashboard setup and configuration
+- **[Helpers](Helpery.md)** - Helper entities and their usage
+
+---
+
+## 📋 Requirements
+
+- NIBE heat pump (F-series)
+- Home Assistant
+- MQTT broker
+- nibepi or compatible Modbus-MQTT bridge
+- Spot electricity price integration
+- Weather integration (e.g., Open-Meteo)
+- Indoor temperature sensor
+
+---
+
+## 🚀 Installation
+
+1. Install the automation blueprint in Home Assistant
+2. Configure required entities (spot price, weather, sensors)
+3. Set up helper entities (input_number helpers)
+4. Configure MQTT topics for your nibepi/bridge
+5. Adjust parameters according to your house characteristics
+6. Monitor and fine-tune over several days
+
+---
+
+## ⚖️ License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+---
+
+## 🙏 Acknowledgments
+
+- NIBE for providing Modbus access to their heat pumps
+- [nibepi project](https://github.com/anerdins/nibepi) for the MQTT-Modbus bridge
+- Home Assistant community for integrations and support
+

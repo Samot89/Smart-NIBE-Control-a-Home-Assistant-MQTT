@@ -125,7 +125,7 @@ action:
       min_change_limit: !input min_change
       look_ahead: !input look_ahead_hours
       trend_val: "{{ states(trend_ent) | float(0) }}"
-      
+
       t_out: "{{ state_attr(weather_ent, 'temperature') | float(0) }}"
       t_in: "{{ states(in_temp_ent) | float(target_temp_var) }}"
       dm_val: "{{ states(dm_ent) | float(0) }}"
@@ -133,7 +133,7 @@ action:
       cena_ted: "{{ states(spot_ent) | float(0) }}"
       stav_pocasi: "{{ states(weather_ent) }}"
       humidity: "{{ state_attr(weather_ent, 'humidity') | float(50) }}"
-      
+
       # 1. LOOK-AHEAD (Předtopení)
       h_index: "{{ now().hour }}"
       today_prices: "{{ state_attr(spot_ent, 'today') }}"
@@ -143,7 +143,7 @@ action:
         {% else %}
           {{ cena_ted }}
         {% endif %}
-      
+
       preheat_bonus: "{{ 1.5 if (cena_budoucich > (cena_ted * 1.3) and cena_ted < 2.5) else 0.0 }}"
 
       # 2. SOLAR & WEATHER
@@ -180,7 +180,7 @@ action:
       gain_val: "{{ states(gain_ent) | float(1.2) }}"
       bias_val: "{{ states(bias_ent) | float(0) }}"
       bonus_6h: "{% if is_state(cheap_ent, 'on') %} 1.0 {% else %} 0 {% endif %}"
-      
+
       corr_indoor: >
         {% set d = t_in - (target_temp_var + bias_val) %}
         {% if d >= 0.8 %} -1.5
@@ -196,7 +196,7 @@ action:
       # 4. DM GUARD & CLAMPING
       # Při velmi záporných stupňominutách omez krok na 1
       max_step: "{{ 1 if dm_val < -800 else 2 }}"
-      
+
       clamped_calc: >
         {% set val = raw_calc | float %}
         {% if t_out < -15 and val > 2.0 %} 2
