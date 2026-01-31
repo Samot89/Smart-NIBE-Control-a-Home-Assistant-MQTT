@@ -1,5 +1,5 @@
 blueprint:
-  name: Smart NIBE – Ultra Adaptive (Winter + Ekviterm + Spot) 
+  name: Smart NIBE – Ultra Adaptive FINAL v2.9.6 (Celá čísla)
   description: Adaptivní řízení offsetu tepelného čerpadla NIBE na základě spotových cen elektřiny, počasí, vnitřních podmínek a předpovědí. Všechny výpočty zaokrouhleny na celá čísla.
                 https://github.com/Samot89/Smart-NIBE-Control-a-Home-Assistant-MQTT.git
   domain: automation
@@ -93,6 +93,22 @@ blueprint:
           min: 1
           max: 5
           step: 1
+    min_write_interval_minutes:
+      name: Min interval mezi zápisy (min)
+      description: Minimální čas mezi zápisy offsetu pro šetření EEPROM
+      default: 45
+      selector:
+        number:
+          min: 5
+          max: 240
+          step: 5
+    last_write_helper:
+      name: Helper pro poslední zápis (input_datetime)
+      description: Volitelné – pokud není zadáno, omezení zápisů se nepoužije
+      default: none
+      selector:
+        entity:
+          domain: input_datetime
     look_ahead_hours:
       name: Hodiny dopředu
       description: Hodiny dopředu pro předpověď ceny (výchozí 2)
@@ -102,10 +118,16 @@ blueprint:
           min: 1
           max: 6
           step: 1
+    run_interval_minutes:
+      name: Interval spouštění (min)
+      description: "Zadej /X pro opakování (např. /2 = každé 2 minuty) NEBO konkrétní minutu 0–59 (např. 2 = vždy v HH:02)."
+      default: "/2"
+      selector:
+        text:
 
 trigger:
   - platform: time_pattern
-    minutes: "2"
+    minutes: !input run_interval_minutes
 
 action:
   - variables:
@@ -123,9 +145,11 @@ action:
       max_off_limit: !input max_offset
       min_off_limit: !input min_offset
       min_change_limit: !input min_change
+      min_write_interval_min: !input min_write_interval_minutes
+      last_write_ent: !input last_write_helper
       look_ahead: !input look_ahead_hours
       trend_val: "{{ states(trend_ent) | float(0) }}"
-
+      
       t_out: "{{ state_attr(weather_ent, 'temperature') | float(0) }}"
       t_in: "{{ states(in_temp_ent) | float(target_temp_var) }}"
       dm_val: "{{ states(dm_ent) | float(0) }}"
@@ -133,18 +157,179 @@ action:
       cena_ted: "{{ states(spot_ent) | float(0) }}"
       stav_pocasi: "{{ states(weather_ent) }}"
       humidity: "{{ state_attr(weather_ent, 'humidity') | float(50) }}"
-
+      humidity_clamped: "{{ [0, [humidity | float(50), 100] | min] | max }}"
+      t_out_clamped: "{{ [-30, [t_out | float(0), 30] | min] | max }}"
+      
       # 1. LOOK-AHEAD (Předtopení)
       h_index: "{{ now().hour }}"
-      today_prices: "{{ state_attr(spot_ent, 'today') }}"
+      preheat_look_ahead: 4
+      today_prices: >
+        {% set t = state_attr(spot_ent, 'today') %}
+        {% if t is none %}{% set t = state_attr(spot_ent, 'raw_today') %}{% endif %}
+        {% if t is none %}{% set t = state_attr(spot_ent, 'prices_today') %}{% endif %}
+        {% if t is none %}{% set t = state_attr(spot_ent, 'data_today') %}{% endif %}
+        {{ t }}
+      tomorrow_prices: >
+        {% set t = state_attr(spot_ent, 'tomorrow') %}
+        {% if t is none %}{% set t = state_attr(spot_ent, 'raw_tomorrow') %}{% endif %}
+        {% if t is none %}{% set t = state_attr(spot_ent, 'prices_tomorrow') %}{% endif %}
+        {% if t is none %}{% set t = state_attr(spot_ent, 'data_tomorrow') %}{% endif %}
+        {{ t }}
+      today_prices_list: >
+        {% set t = today_prices %}
+        {% if t is mapping %}
+          {% set vals = t | dictsort | map(attribute=1) | list %}
+          {% if vals | length > 0 and vals[0] is mapping %}
+            {% if 'value' in vals[0] %}
+              {{ vals | map(attribute='value') | list }}
+            {% elif 'price' in vals[0] %}
+              {{ vals | map(attribute='price') | list }}
+            {% elif 'value_inc_vat' in vals[0] %}
+              {{ vals | map(attribute='value_inc_vat') | list }}
+            {% elif 'value_with_tax' in vals[0] %}
+              {{ vals | map(attribute='value_with_tax') | list }}
+            {% else %}
+              {{ vals | list }}
+            {% endif %}
+          {% else %}
+            {{ vals | list }}
+          {% endif %}
+        {% elif t is iterable and (t | length > 0) %}
+          {% if t[0] is mapping %}
+            {% if 'value' in t[0] %}
+              {{ t | map(attribute='value') | list }}
+            {% elif 'price' in t[0] %}
+              {{ t | map(attribute='price') | list }}
+            {% elif 'value_inc_vat' in t[0] %}
+              {{ t | map(attribute='value_inc_vat') | list }}
+            {% elif 'value_with_tax' in t[0] %}
+              {{ t | map(attribute='value_with_tax') | list }}
+            {% else %}
+              {{ t | list }}
+            {% endif %}
+          {% else %}
+            {{ t | list }}
+          {% endif %}
+        {% else %}
+          []
+        {% endif %}
+      tomorrow_prices_list: >
+        {% set t = tomorrow_prices %}
+        {% if t is mapping %}
+          {% set vals = t | dictsort | map(attribute=1) | list %}
+          {% if vals | length > 0 and vals[0] is mapping %}
+            {% if 'value' in vals[0] %}
+              {{ vals | map(attribute='value') | list }}
+            {% elif 'price' in vals[0] %}
+              {{ vals | map(attribute='price') | list }}
+            {% elif 'value_inc_vat' in vals[0] %}
+              {{ vals | map(attribute='value_inc_vat') | list }}
+            {% elif 'value_with_tax' in vals[0] %}
+              {{ vals | map(attribute='value_with_tax') | list }}
+            {% else %}
+              {{ vals | list }}
+            {% endif %}
+          {% else %}
+            {{ vals | list }}
+          {% endif %}
+        {% elif t is iterable and (t | length > 0) %}
+          {% if t[0] is mapping %}
+            {% if 'value' in t[0] %}
+              {{ t | map(attribute='value') | list }}
+            {% elif 'price' in t[0] %}
+              {{ t | map(attribute='price') | list }}
+            {% elif 'value_inc_vat' in t[0] %}
+              {{ t | map(attribute='value_inc_vat') | list }}
+            {% elif 'value_with_tax' in t[0] %}
+              {{ t | map(attribute='value_with_tax') | list }}
+            {% else %}
+              {{ t | list }}
+            {% endif %}
+          {% else %}
+            {{ t | list }}
+          {% endif %}
+        {% else %}
+          []
+        {% endif %}
+      base_prices: >
+        {% set t = state_attr(spot_ent, 'prices') %}
+        {% if t is none %}{% set t = state_attr(spot_ent, 'raw') %}{% endif %}
+        {% if t is none %}{% set t = state_attr(spot_ent, 'all') %}{% endif %}
+        {% if t is none %}{% set t = state_attr(spot_ent, 'data') %}{% endif %}
+        {{ t }}
+      base_prices_list: >
+        {% set t = base_prices %}
+        {% if t is mapping %}
+          {% set vals = t | dictsort | map(attribute=1) | list %}
+          {% if vals | length > 0 and vals[0] is mapping %}
+            {% if 'value' in vals[0] %}
+              {{ vals | map(attribute='value') | list }}
+            {% elif 'price' in vals[0] %}
+              {{ vals | map(attribute='price') | list }}
+            {% elif 'value_inc_vat' in vals[0] %}
+              {{ vals | map(attribute='value_inc_vat') | list }}
+            {% elif 'value_with_tax' in vals[0] %}
+              {{ vals | map(attribute='value_with_tax') | list }}
+            {% else %}
+              {{ vals | list }}
+            {% endif %}
+          {% else %}
+            {{ vals | list }}
+          {% endif %}
+        {% elif t is iterable and (t | length > 0) %}
+          {% if t[0] is mapping %}
+            {% if 'value' in t[0] %}
+              {{ t | map(attribute='value') | list }}
+            {% elif 'price' in t[0] %}
+              {{ t | map(attribute='price') | list }}
+            {% elif 'value_inc_vat' in t[0] %}
+              {{ t | map(attribute='value_inc_vat') | list }}
+            {% elif 'value_with_tax' in t[0] %}
+              {{ t | map(attribute='value_with_tax') | list }}
+            {% else %}
+              {{ t | list }}
+            {% endif %}
+          {% else %}
+            {{ t | list }}
+          {% endif %}
+        {% else %}
+          []
+        {% endif %}
+      today_prices_list_final: >
+        {% if today_prices_list is iterable and (today_prices_list | length > 0) %}
+          {{ today_prices_list }}
+        {% elif base_prices_list is iterable and (base_prices_list | length >= 24) %}
+          {{ base_prices_list[:24] | list }}
+        {% else %}
+          []
+        {% endif %}
+      tomorrow_prices_list_final: >
+        {% if tomorrow_prices_list is iterable and (tomorrow_prices_list | length > 0) %}
+          {{ tomorrow_prices_list }}
+        {% elif base_prices_list is iterable and (base_prices_list | length >= 48) %}
+          {{ base_prices_list[24:48] | list }}
+        {% else %}
+          []
+        {% endif %}
+      all_prices: >
+        {% set t = today_prices_list_final %}
+        {% set tm = tomorrow_prices_list_final %}
+        {{ (t + tm) if (t is iterable and tm is iterable) else t }}
       cena_budoucich: >
-        {% if today_prices is iterable and today_prices | length > (h_index + look_ahead) %}
-          {{ today_prices[h_index + look_ahead] | float(cena_ted) }}
+        {% if all_prices is iterable and all_prices | length > (h_index + look_ahead) %}
+          {{ all_prices[h_index + look_ahead] | float(cena_ted) }}
         {% else %}
           {{ cena_ted }}
         {% endif %}
 
-      preheat_bonus: "{{ 1.5 if (cena_budoucich > (cena_ted * 1.3) and cena_ted < 2.5) else 0.0 }}"
+      cena_preheat: >
+        {% if all_prices is iterable and all_prices | length > (h_index + preheat_look_ahead) %}
+          {{ all_prices[h_index + preheat_look_ahead] | float(cena_ted) }}
+        {% else %}
+          {{ cena_ted }}
+        {% endif %}
+
+      preheat_bonus: "{{ 1.5 if (cena_preheat > (cena_ted * 1.3) and cena_ted < 2.5) else 0.0 }}"
 
       # 2. SOLAR & WEATHER
       solar_malus: >
@@ -166,7 +351,7 @@ action:
         {% elif state in light %} 0.5
         {% else %} 0
         {% endif %}
-      humidity_bonus: "{{ 0.5 if humidity > 80 and t_out < 10 else 0.0 }}"
+      humidity_bonus: "{{ 0.5 if humidity_clamped > 80 and t_out_clamped < 10 else 0.0 }}"
       forecast_bonus: >
         {% set t = trend_val %}
         {% set lin = (t * -0.4) %}
@@ -180,7 +365,7 @@ action:
       gain_val: "{{ states(gain_ent) | float(1.2) }}"
       bias_val: "{{ states(bias_ent) | float(0) }}"
       bonus_6h: "{% if is_state(cheap_ent, 'on') %} 1.0 {% else %} 0 {% endif %}"
-
+      
       corr_indoor: >
         {% set d = t_in - (target_temp_var + bias_val) %}
         {% if d >= 0.8 %} -1.5
@@ -196,7 +381,7 @@ action:
       # 4. DM GUARD & CLAMPING
       # Při velmi záporných stupňominutách omez krok na 1
       max_step: "{{ 1 if dm_val < -800 else 2 }}"
-
+      
       clamped_calc: >
         {% set val = raw_calc | float %}
         {% if t_out < -15 and val > 2.0 %} 2
@@ -209,23 +394,23 @@ action:
       offset_final: >
         {% set diff = (clamped_calc | int) - (off_curr | int) %}
         {% if diff >= max_step | int %} {{ (off_curr | int + max_step | int) }}
-        {% elif diff <= -2 %} {{ (off_curr | int - 1) }}
+        {% elif diff <= (0 - max_step | int) %} {{ (off_curr | int - max_step | int) }}
         {% else %} {{ clamped_calc | int }}
         {% endif %}
 
-  - condition: template
-    value_template: "{{ hdo_ent == 'none' or is_state(hdo_ent, 'on') }}"
+      # Dynamický minimální krok (méně kmitání při stabilním trendu)
+      effective_min_change: "{{ 2 if (trend_val | float(0) | abs) < 0.2 else (min_change_limit | int) }}"
 
-  - condition: template
-    value_template: "{{ states(spot_ent) != 'unavailable' and states(weather_ent) != 'unavailable' and states(dm_ent) != 'unavailable' and states(in_temp_ent) != 'unavailable' and states(curr_off_ent) != 'unavailable' }}"
-
-  - condition: template
-    value_template: "{{ (off_curr | int - offset_final | int) | abs >= min_change_limit | int }}"
-
-  - service: mqtt.publish
-    data:
-      topic: !input mqtt_topic
-      payload: "{{ offset_final | int }}"
+      # EEPROM guard (časový limit + komfortní override)
+      last_write_ts: >
+        {% set dt = state_attr(last_write_ent, 'datetime') %}
+        {% if dt is none %}{% set dt = state_attr(last_write_ent, 'timestamp') %}{% endif %}
+        {% if dt is none %}{% set dt = states(last_write_ent) %}{% endif %}
+        {{ as_timestamp(dt, 0) | float(0) }}
+      now_ts: "{{ now().timestamp() }}"
+      minutes_since_write: "{{ ((now_ts - last_write_ts) / 60) | round(1) }}"
+      comfort_override: "{{ (t_in - (target_temp_var + bias_val)) | abs >= 0.7 }}"
+      allow_write_by_time: "{{ last_write_ent == 'none' or (minutes_since_write | float(0)) >= (min_write_interval_min | float(0)) }}"
 
   - service: mqtt.publish
     data:
@@ -235,7 +420,7 @@ action:
         {% set vliv_indoor = (corr_indoor * gain_val) | round(2) %}
         {{
           {
-            "verze": "2.9.5",
+            "verze": "2.9.6",
             "celkovy_offset": offset_final | int,
             "surovy_vypocet": raw_calc | round(2),
             "stupnominuty": dm_val | int,
@@ -253,7 +438,19 @@ action:
             "ceny": {
               "aktualni": cena_ted | round(2),
               "za_2h": cena_budoucich | round(2),
-              "prvni_3h": (today_prices[:3] if today_prices is iterable else []) | list
+              "prvni_3h": (all_prices[:3] if all_prices is iterable else []) | list,
+              "tomorrow_available": (tomorrow_prices is iterable)
+            },
+            "guard": {
+              "max_step": max_step | int,
+              "effective_min_change": effective_min_change | int
+            },
+            "eeprom_guard": {
+              "min_interval_min": min_write_interval_min | int,
+              "minutes_since_write": minutes_since_write | float,
+              "allow_write_by_time": allow_write_by_time,
+              "comfort_override": comfort_override,
+              "last_write_helper": last_write_ent
             },
             "teploty": {
               "venkovni": t_out,
@@ -268,5 +465,43 @@ action:
           } | tojson
         }}
       retain: true
+
+  - choose:
+      - conditions:
+          - condition: template
+            value_template: "{{ all_prices is not iterable or (all_prices | length) == 0 }}"
+        sequence:
+          - service: logbook.log
+            data:
+              name: "NIBE Debug"
+              message: "Chybí spot ceny (today/tomorrow nejsou k dispozici nebo mají nečekaný formát)."
+              entity_id: "{{ spot_ent }}"
+
+  - condition: template
+    value_template: "{{ hdo_ent == 'none' or is_state(hdo_ent, 'on') }}"
+
+  - condition: template
+    value_template: "{{ states(spot_ent) != 'unavailable' and states(weather_ent) != 'unavailable' and states(dm_ent) != 'unavailable' and states(in_temp_ent) != 'unavailable' and states(curr_off_ent) != 'unavailable' }}"
+
+  - condition: template
+    value_template: "{{ (off_curr | int - offset_final | int) | abs >= effective_min_change | int }}"
+
+  - condition: template
+    value_template: "{{ allow_write_by_time or comfort_override }}"
+
+  - service: mqtt.publish
+    data:
+      topic: !input mqtt_topic
+      payload: "{{ offset_final | int }}"
+
+  - choose:
+      - conditions:
+          - condition: template
+            value_template: "{{ last_write_ent != 'none' }}"
+        sequence:
+          - service: input_datetime.set_datetime
+            data:
+              entity_id: "{{ last_write_ent }}"
+              timestamp: "{{ now_ts }}"
 
 mode: single
