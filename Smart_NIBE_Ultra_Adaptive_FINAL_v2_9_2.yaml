@@ -1,126 +1,170 @@
 blueprint:
-  name: Smart NIBE – Ultra Adaptive FINAL v2.9.6 (Celá čísla)
-  description: Adaptivní řízení offsetu tepelného čerpadla NIBE na základě spotových cen elektřiny, počasí, vnitřních podmínek a předpovědí. Všechny výpočty zaokrouhleny na celá čísla.
-                https://github.com/Samot89/Smart-NIBE-Control-a-Home-Assistant-MQTT.git
+  name: Smart NIBE – v4.3 (+ COP)
+  description: |
+    Adaptivní řízení offsetu tepelného čerpadla NIBE.
+
+    **v4.3 - Nové funkce:**
+    - 🔋 COP bonus - optimalizace podle účinnosti TČ
+    - ✅ 8 složek výpočtu
+    - 📊 Detailní MQTT debug
+
+    **COP prahy kalibrované pro NIBE ground-source (rozsah 4–7+):**
+    - >7.0 → -0.8 | >6.5 → -0.5 | >6.0 → -0.3
+    - 5.0–6.0 → neutrální
+    - <5.0 → +0.5 | <4.0 → +0.8 (mráz)
   domain: automation
   input:
-    # ... (inputy zůstávají stejné)
+    # ==========================================
+    # ZÁKLADNÍ SENZORY
+    # ==========================================
     spot_price:
-      name: Spot price sensor
+      name: 💰 Spot price sensor
       selector:
         entity:
           domain: sensor
+
     cheap_block:
-      name: Cheapest 6h block sensor
+      name: ⏰ Nejlevnější 6h blok
+      default: none
       selector:
         entity:
           domain: sensor
+
     degree_minutes:
-      name: Degree Minutes sensor
+      name: 🌡️ Degree Minutes sensor
       selector:
         entity:
           domain: sensor
+
     outdoor_weather:
-      name: Weather entity
+      name: 🌦️ Weather entity
       selector:
         entity:
           domain: weather
+
     indoor_temp:
-      name: Indoor temperature sensor
+      name: 🏠 Vnitřní teplota
       selector:
         entity:
           domain: sensor
+
     forecast_trend:
-      name: Weather forecast trend helper
+      name: 📈 Trend předpovědi počasí
       selector:
         entity:
           domain: input_number
+
     hdo:
-      name: HDO binary sensor (nepovinné)
+      name: ⚡ HDO binary sensor
       default: none
       selector:
         entity:
           domain: binary_sensor
+
     current_offset:
-      name: Current NIBE offset sensor
+      name: 🎚️ Aktuální NIBE offset
       selector:
         entity:
           domain: sensor
+
+    # ==========================================
+    # COP SENZOR v4.3
+    # ==========================================
+    cop_sensor:
+      name: 🔋 COP sensor (Coefficient of Performance)
+      description: >
+        Volitelné - sensor.nibe_cop_nibe_cop_heat_2
+        Hodnoty typicky 4.0–7.5 pro NIBE ground-source.
+        Prahy: >7.0→-0.8, >6.5→-0.5, >6.0→-0.3, <5.0→+0.5, <4.0→+0.8
+      default: none
+      selector:
+        entity:
+          domain: sensor
+
+    # ==========================================
+    # ŘÍDÍCÍ PARAMETRY
+    # ==========================================
     indoor_bias:
-      name: Indoor bias helper
+      name: 🎯 Indoor bias
       selector:
         entity:
           domain: input_number
+
     response_gain:
-      name: Indoor response gain helper
+      name: 📊 Response gain
       selector:
         entity:
           domain: input_number
+
+    # ==========================================
+    # MQTT
+    # ==========================================
     mqtt_topic:
-      name: MQTT topic
+      name: 📡 MQTT topic
       default: nibe/modbus/47011/set
       selector:
         text:
+
+    mqtt_debug_topic:
+      name: 🔍 MQTT debug topic
+      default: nibe/debug/offset_calc
+      selector:
+        text:
+
+    # ==========================================
+    # LIMITY
+    # ==========================================
     target_temp:
-      name: Target indoor temperature
+      name: 🌡️ Cílová vnitřní teplota
       default: 21.5
       selector:
         number:
           min: 18
           max: 24
           step: 0.1
+
     max_offset:
-      name: Max offset
+      name: ⬆️ Maximální offset
       default: 6
       selector:
         number:
           min: 1
           max: 10
-          step: 1
+
     min_offset:
-      name: Min offset
+      name: ⬇️ Minimální offset
       default: -3
       selector:
         number:
           min: -8
           max: -1
-          step: 1
+
     min_change:
-      name: Min offset change
+      name: 🔄 Minimální změna offsetu
       default: 1
       selector:
         number:
           min: 1
           max: 5
-          step: 1
+
     min_write_interval_minutes:
-      name: Min interval mezi zápisy (min)
-      description: Minimální čas mezi zápisy offsetu pro šetření EEPROM
+      name: ⏱️ Minimální interval mezi zápisy
       default: 45
       selector:
         number:
           min: 5
           max: 240
           step: 5
+
     last_write_helper:
-      name: Helper pro poslední zápis (input_datetime)
-      description: Volitelné – pokud není zadáno, omezení zápisů se nepoužije
+      name: 🕐 Helper pro poslední zápis
       default: none
       selector:
         entity:
           domain: input_datetime
-    look_ahead_hours:
-      name: Hodiny dopředu
-      description: Hodiny dopředu pro předpověď ceny (výchozí 2)
-      default: 2
-      selector:
-        number:
-          min: 1
-          max: 6
-          step: 1
+
     run_interval_minutes:
-      name: Interval spouštění (min)
-      description: "Zadej /X pro opakování (např. /2 = každé 2 minuty) NEBO konkrétní minutu 0–59 (např. 2 = vždy v HH:02)."
+      name: ⏰ Interval spouštění
       default: "/2"
       selector:
         text:
@@ -141,351 +185,320 @@ action:
       bias_ent: !input indoor_bias
       gain_ent: !input response_gain
       hdo_ent: !input hdo
+      last_write_ent: !input last_write_helper
+      cop_ent: !input cop_sensor
       target_temp_var: !input target_temp
       max_off_limit: !input max_offset
       min_off_limit: !input min_offset
       min_change_limit: !input min_change
       min_write_interval_min: !input min_write_interval_minutes
-      last_write_ent: !input last_write_helper
-      look_ahead: !input look_ahead_hours
+      preheat_look_ahead: 4
       trend_val: "{{ states(trend_ent) | float(0) }}"
-      
-      t_out: "{{ state_attr(weather_ent, 'temperature') | float(0) }}"
+      t_out_raw: "{{ state_attr(weather_ent, 'temperature') | float(0) }}"
       t_in: "{{ states(in_temp_ent) | float(target_temp_var) }}"
       dm_val: "{{ states(dm_ent) | float(0) }}"
       off_curr: "{{ states(curr_off_ent) | int(0) }}"
       cena_ted: "{{ states(spot_ent) | float(0) }}"
       stav_pocasi: "{{ states(weather_ent) }}"
-      humidity: "{{ state_attr(weather_ent, 'humidity') | float(50) }}"
-      humidity_clamped: "{{ [0, [humidity | float(50), 100] | min] | max }}"
-      t_out_clamped: "{{ [-30, [t_out | float(0), 30] | min] | max }}"
-      
-      # 1. LOOK-AHEAD (Předtopení)
+      t_out: "{{ [[-30, t_out_raw | float(0)] | max, 30] | min }}"
       h_index: "{{ now().hour }}"
-      preheat_look_ahead: 4
-      today_prices: >
+      now_ts: "{{ now().timestamp() }}"
+
+  - variables:
+      today_prices_raw: >
         {% set t = state_attr(spot_ent, 'today') %}
         {% if t is none %}{% set t = state_attr(spot_ent, 'raw_today') %}{% endif %}
         {% if t is none %}{% set t = state_attr(spot_ent, 'prices_today') %}{% endif %}
-        {% if t is none %}{% set t = state_attr(spot_ent, 'data_today') %}{% endif %}
         {{ t }}
-      tomorrow_prices: >
+      tomorrow_prices_raw: >
         {% set t = state_attr(spot_ent, 'tomorrow') %}
         {% if t is none %}{% set t = state_attr(spot_ent, 'raw_tomorrow') %}{% endif %}
         {% if t is none %}{% set t = state_attr(spot_ent, 'prices_tomorrow') %}{% endif %}
-        {% if t is none %}{% set t = state_attr(spot_ent, 'data_tomorrow') %}{% endif %}
         {{ t }}
       today_prices_list: >
-        {% set t = today_prices %}
+        {% set t = today_prices_raw %}
+        {% if t is mapping and ('values' in t or 'prices' in t) %}
+          {% set t = t['values'] if 'values' in t else t['prices'] %}
+        {% endif %}
         {% if t is mapping %}
           {% set vals = t | dictsort | map(attribute=1) | list %}
-          {% if vals | length > 0 and vals[0] is mapping %}
-            {% if 'value' in vals[0] %}
-              {{ vals | map(attribute='value') | list }}
-            {% elif 'price' in vals[0] %}
-              {{ vals | map(attribute='price') | list }}
-            {% elif 'value_inc_vat' in vals[0] %}
-              {{ vals | map(attribute='value_inc_vat') | list }}
-            {% elif 'value_with_tax' in vals[0] %}
-              {{ vals | map(attribute='value_with_tax') | list }}
-            {% else %}
-              {{ vals | list }}
-            {% endif %}
-          {% else %}
+          {% if vals | length > 0 and vals[0] is not mapping %}
             {{ vals | list }}
-          {% endif %}
-        {% elif t is iterable and (t | length > 0) %}
-          {% if t[0] is mapping %}
-            {% if 'value' in t[0] %}
-              {{ t | map(attribute='value') | list }}
-            {% elif 'price' in t[0] %}
-              {{ t | map(attribute='price') | list }}
-            {% elif 'value_inc_vat' in t[0] %}
-              {{ t | map(attribute='value_inc_vat') | list }}
-            {% elif 'value_with_tax' in t[0] %}
-              {{ t | map(attribute='value_with_tax') | list }}
-            {% else %}
-              {{ t | list }}
-            {% endif %}
-          {% else %}
-            {{ t | list }}
-          {% endif %}
-        {% else %}
-          []
-        {% endif %}
+          {% elif vals | length > 0 %}
+            {% for key in ['value', 'price', 'price_with_tax'] %}
+              {% if key in vals[0] %}
+                {{ vals | map(attribute=key) | list }}
+                {% break %}
+              {% endif %}
+            {% endfor %}
+          {% else %}[]{% endif %}
+        {% elif t is iterable and t is not string %}
+          {{ t | list }}
+        {% else %}[]{% endif %}
       tomorrow_prices_list: >
-        {% set t = tomorrow_prices %}
+        {% set t = tomorrow_prices_raw %}
+        {% if t is mapping and ('values' in t or 'prices' in t) %}
+          {% set t = t['values'] if 'values' in t else t['prices'] %}
+        {% endif %}
         {% if t is mapping %}
           {% set vals = t | dictsort | map(attribute=1) | list %}
-          {% if vals | length > 0 and vals[0] is mapping %}
-            {% if 'value' in vals[0] %}
-              {{ vals | map(attribute='value') | list }}
-            {% elif 'price' in vals[0] %}
-              {{ vals | map(attribute='price') | list }}
-            {% elif 'value_inc_vat' in vals[0] %}
-              {{ vals | map(attribute='value_inc_vat') | list }}
-            {% elif 'value_with_tax' in vals[0] %}
-              {{ vals | map(attribute='value_with_tax') | list }}
-            {% else %}
-              {{ vals | list }}
-            {% endif %}
-          {% else %}
+          {% if vals | length > 0 and vals[0] is not mapping %}
             {{ vals | list }}
-          {% endif %}
-        {% elif t is iterable and (t | length > 0) %}
-          {% if t[0] is mapping %}
-            {% if 'value' in t[0] %}
-              {{ t | map(attribute='value') | list }}
-            {% elif 'price' in t[0] %}
-              {{ t | map(attribute='price') | list }}
-            {% elif 'value_inc_vat' in t[0] %}
-              {{ t | map(attribute='value_inc_vat') | list }}
-            {% elif 'value_with_tax' in t[0] %}
-              {{ t | map(attribute='value_with_tax') | list }}
-            {% else %}
-              {{ t | list }}
-            {% endif %}
-          {% else %}
-            {{ t | list }}
-          {% endif %}
-        {% else %}
-          []
-        {% endif %}
-      base_prices: >
-        {% set t = state_attr(spot_ent, 'prices') %}
-        {% if t is none %}{% set t = state_attr(spot_ent, 'raw') %}{% endif %}
-        {% if t is none %}{% set t = state_attr(spot_ent, 'all') %}{% endif %}
-        {% if t is none %}{% set t = state_attr(spot_ent, 'data') %}{% endif %}
-        {{ t }}
-      base_prices_list: >
-        {% set t = base_prices %}
-        {% if t is mapping %}
-          {% set vals = t | dictsort | map(attribute=1) | list %}
-          {% if vals | length > 0 and vals[0] is mapping %}
-            {% if 'value' in vals[0] %}
-              {{ vals | map(attribute='value') | list }}
-            {% elif 'price' in vals[0] %}
-              {{ vals | map(attribute='price') | list }}
-            {% elif 'value_inc_vat' in vals[0] %}
-              {{ vals | map(attribute='value_inc_vat') | list }}
-            {% elif 'value_with_tax' in vals[0] %}
-              {{ vals | map(attribute='value_with_tax') | list }}
-            {% else %}
-              {{ vals | list }}
-            {% endif %}
-          {% else %}
-            {{ vals | list }}
-          {% endif %}
-        {% elif t is iterable and (t | length > 0) %}
-          {% if t[0] is mapping %}
-            {% if 'value' in t[0] %}
-              {{ t | map(attribute='value') | list }}
-            {% elif 'price' in t[0] %}
-              {{ t | map(attribute='price') | list }}
-            {% elif 'value_inc_vat' in t[0] %}
-              {{ t | map(attribute='value_inc_vat') | list }}
-            {% elif 'value_with_tax' in t[0] %}
-              {{ t | map(attribute='value_with_tax') | list }}
-            {% else %}
-              {{ t | list }}
-            {% endif %}
-          {% else %}
-            {{ t | list }}
-          {% endif %}
-        {% else %}
-          []
-        {% endif %}
-      today_prices_list_final: >
-        {% if today_prices_list is iterable and (today_prices_list | length > 0) %}
-          {{ today_prices_list }}
-        {% elif base_prices_list is iterable and (base_prices_list | length >= 24) %}
-          {{ base_prices_list[:24] | list }}
-        {% else %}
-          []
-        {% endif %}
-      tomorrow_prices_list_final: >
-        {% if tomorrow_prices_list is iterable and (tomorrow_prices_list | length > 0) %}
-          {{ tomorrow_prices_list }}
-        {% elif base_prices_list is iterable and (base_prices_list | length >= 48) %}
-          {{ base_prices_list[24:48] | list }}
-        {% else %}
-          []
-        {% endif %}
+          {% elif vals | length > 0 %}
+            {% for key in ['value', 'price', 'price_with_tax'] %}
+              {% if key in vals[0] %}
+                {{ vals | map(attribute=key) | list }}
+                {% break %}
+              {% endif %}
+            {% endfor %}
+          {% else %}[]{% endif %}
+        {% elif t is iterable and t is not string %}
+          {{ t | list }}
+        {% else %}[]{% endif %}
       all_prices: >
-        {% set t = today_prices_list_final %}
-        {% set tm = tomorrow_prices_list_final %}
-        {{ (t + tm) if (t is iterable and tm is iterable) else t }}
-      cena_budoucich: >
-        {% if all_prices is iterable and all_prices | length > (h_index + look_ahead) %}
-          {{ all_prices[h_index + look_ahead] | float(cena_ted) }}
-        {% else %}
-          {{ cena_ted }}
-        {% endif %}
-
+        {% set t = today_prices_list %}
+        {% set tm = tomorrow_prices_list %}
+        {{ (t + tm) if (t is iterable and tm is iterable) else (t if t is iterable else []) }}
       cena_preheat: >
-        {% if all_prices is iterable and all_prices | length > (h_index + preheat_look_ahead) %}
-          {{ all_prices[h_index + preheat_look_ahead] | float(cena_ted) }}
-        {% else %}
-          {{ cena_ted }}
-        {% endif %}
+        {% set idx = (h_index | int) + (preheat_look_ahead | int) %}
+        {% if all_prices is iterable and all_prices | length > idx %}
+          {{ all_prices[idx] | float(cena_ted) }}
+        {% else %}{{ cena_ted }}{% endif %}
 
-      preheat_bonus: "{{ 1.5 if (cena_preheat > (cena_ted * 1.3) and cena_ted < 2.5) else 0.0 }}"
+  - variables:
+      # 1. PREHEAT BONUS
+      preheat_bonus: >
+        {% if cena_preheat | float > (cena_ted | float * 1.3) and cena_ted | float < 2.5 %}
+          1.5
+        {% else %}0.0{% endif %}
 
-      # 2. SOLAR & WEATHER
+      # 2. SOLAR MALUS
       solar_malus: >
-        {% set state = stav_pocasi %}
-        {% set clear_states = ['sunny', 'clear', 'clear-night', 'clear_night'] %}
-        {% set partial_states = ['partlycloudy', 'partly cloudy', 'partly_cloudy', 'mostlycloudy', 'mostly_cloudy'] %}
         {% if 9 <= now().hour <= 15 %}
-          {% if state in clear_states %} -1.0
-          {% elif state in partial_states %} -0.5
-          {% else %} 0.0
-          {% endif %}
-        {% else %} 0.0
-        {% endif %}
-      rain_bonus: >
-        {% set state = stav_pocasi %}
-        {% set heavy = ['pouring', 'lightning-rainy', 'lightning_rainy', 'hail'] %}
-        {% set light = ['rainy', 'rain', 'light_rain', 'snow', 'sleet'] %}
-        {% if state in heavy %} 1.0
-        {% elif state in light %} 0.5
-        {% else %} 0
-        {% endif %}
-      humidity_bonus: "{{ 0.5 if humidity_clamped > 80 and t_out_clamped < 10 else 0.0 }}"
-      forecast_bonus: >
-        {% set t = trend_val %}
-        {% set lin = (t * -0.4) %}
-        {% if lin > 1 %} 1
-        {% elif lin < -1 %} -1
-        {% else %} {{ lin | round(2) }}
-        {% endif %}
+          {% set state = stav_pocasi | lower %}
+          {% if state in ['sunny', 'clear'] %}-1.0
+          {% elif 'cloud' in state %}-0.5
+          {% else %}0.0{% endif %}
+        {% else %}0.0{% endif %}
 
-      # 3. ZÁKLADNÍ VÝPOČET
-      ekvi_posun: "{{ (0 - t_out) / 10 if t_out < 5 else 0 }}"
+      # 3. FORECAST BONUS
+      forecast_bonus: >
+        {{ [[trend_val | float * -0.4, 1] | min, -1] | max | round(2) }}
+
+      # 4. EKVITERM
+      ekvi_posun: >
+        {% if t_out | float < 5 %}
+          {{ (0 - t_out | float) / 10 }}
+        {% else %}0{% endif %}
+
+      # 5. VNITŘNÍ KOREKCE
       gain_val: "{{ states(gain_ent) | float(1.2) }}"
       bias_val: "{{ states(bias_ent) | float(0) }}"
-      bonus_6h: "{% if is_state(cheap_ent, 'on') %} 1.0 {% else %} 0 {% endif %}"
-      
+      temp_diff: "{{ t_in | float - (target_temp_var | float + bias_val | float) }}"
       corr_indoor: >
-        {% set d = t_in - (target_temp_var + bias_val) %}
-        {% if d >= 0.8 %} -1.5
-        {% elif d >= 0.3 %} -0.7
-        {% elif d <= -0.8 %} 2.0
-        {% elif d <= -0.3 %} 1.0
-        {% else %} 0
+        {% set d = temp_diff | float %}
+        {% if d >= 0.8 %}-1.5
+        {% elif d >= 0.3 %}-0.7
+        {% elif d <= -0.8 %}2.0
+        {% elif d <= -0.3 %}1.0
+        {% else %}0.0{% endif %}
+
+      # 6. BONUS 6H
+      bonus_6h: >
+        {% if cheap_ent != 'none' and is_state(cheap_ent, 'on') %}1.0
+        {% else %}0{% endif %}
+
+      # 7. VLIV SPOT
+      vliv_spot_raw: "{{ (-0.8 * cena_ted | float) + 4.0 }}"
+
+      # 8. COP BONUS – prahy pro NIBE ground-source (rozsah 4.0–7.5)
+      cop_value: >
+        {% if cop_ent == 'none' %}
+          6.0
+        {% else %}
+          {{ states(cop_ent) | float(6.0) }}
+        {% endif %}
+      cop_bonus: >
+        {% set cop = cop_value | float %}
+        {% if cop > 7.0 %}
+          -0.8
+        {% elif cop > 6.5 %}
+          -0.5
+        {% elif cop > 6.0 %}
+          -0.3
+        {% elif cop < 4.0 %}
+          0.8
+        {% elif cop < 5.0 %}
+          0.5
+        {% else %}
+          0.0
         {% endif %}
 
-      # Surový součet všech vlivů
-      raw_calc: "{{ ((-0.8 * cena_ted) + 4.0 + ekvi_posun + (bonus_6h | float) + (corr_indoor * gain_val) + preheat_bonus + solar_malus + rain_bonus + humidity_bonus + forecast_bonus) }}"
+  - variables:
+      # HLAVNÍ VÝPOČET (8 SLOŽEK)
+      raw_calc: >
+        {{ vliv_spot_raw | float + ekvi_posun | float + bonus_6h | float +
+           (corr_indoor | float * gain_val | float) + preheat_bonus | float +
+           solar_malus | float + forecast_bonus | float + cop_bonus | float }}
 
-      # 4. DM GUARD & CLAMPING
-      # Při velmi záporných stupňominutách omez krok na 1
-      max_step: "{{ 1 if dm_val < -800 else 2 }}"
-      
+      max_step: "{% if dm_val | float < -800 %}1{% else %}2{% endif %}"
+
       clamped_calc: >
         {% set val = raw_calc | float %}
-        {% if t_out < -15 and val > 2.0 %} 2
-        {% elif val > max_off_limit | float %} {{ max_off_limit | int }}
-        {% elif val < min_off_limit | float %} {{ min_off_limit | int }}
-        {% else %} {{ val | round(0) }}
-        {% endif %}
+        {% if t_out | float < -15 and val > 2.0 %}2
+        {% elif val > max_off_limit | float %}{{ max_off_limit | int }}
+        {% elif val < min_off_limit | float %}{{ min_off_limit | int }}
+        {% else %}{{ val | round | int }}{% endif %}
 
-      # 5. FINÁLNÍ OFFSET (Celé číslo)
       offset_final: >
-        {% set diff = (clamped_calc | int) - (off_curr | int) %}
-        {% if diff >= max_step | int %} {{ (off_curr | int + max_step | int) }}
-        {% elif diff <= (0 - max_step | int) %} {{ (off_curr | int - max_step | int) }}
-        {% else %} {{ clamped_calc | int }}
-        {% endif %}
+        {% set target = clamped_calc | int %}
+        {% set current = off_curr | int %}
+        {% set diff = target - current %}
+        {% set step = max_step | int %}
+        {% if diff > step %}{{ current + step }}
+        {% elif diff < -step %}{{ current - step }}
+        {% else %}{{ target }}{% endif %}
 
-      # Dynamický minimální krok (méně kmitání při stabilním trendu)
-      effective_min_change: "{{ 2 if (trend_val | float(0) | abs) < 0.2 else (min_change_limit | int) }}"
+      effective_min_change: >
+        {% if trend_val | float | abs < 0.2 %}2
+        {% else %}{{ min_change_limit | int }}{% endif %}
 
-      # EEPROM guard (časový limit + komfortní override)
+  - variables:
       last_write_ts: >
-        {% set dt = state_attr(last_write_ent, 'datetime') %}
-        {% if dt is none %}{% set dt = state_attr(last_write_ent, 'timestamp') %}{% endif %}
-        {% if dt is none %}{% set dt = states(last_write_ent) %}{% endif %}
-        {{ as_timestamp(dt, 0) | float(0) }}
-      now_ts: "{{ now().timestamp() }}"
+        {% if last_write_ent == 'none' %}0
+        {% else %}
+          {% set dt = state_attr(last_write_ent, 'datetime') %}
+          {% if dt is none %}{% set dt = states(last_write_ent) %}{% endif %}
+          {{ as_timestamp(dt, 0) | float }}
+        {% endif %}
       minutes_since_write: "{{ ((now_ts - last_write_ts) / 60) | round(1) }}"
-      comfort_override: "{{ (t_in - (target_temp_var + bias_val)) | abs >= 0.7 }}"
-      allow_write_by_time: "{{ last_write_ent == 'none' or (minutes_since_write | float(0)) >= (min_write_interval_min | float(0)) }}"
+      comfort_override: "{{ temp_diff | float | abs >= 0.7 }}"
+      allow_write_by_time: >
+        {{ last_write_ent == 'none' or
+           minutes_since_write | float >= min_write_interval_min | float }}
 
+  # MQTT DEBUG
   - service: mqtt.publish
     data:
-      topic: "nibe/debug/offset_calc"
+      topic: !input mqtt_debug_topic
       payload: >
-        {% set vliv_spotu = (-0.8 * cena_ted + 4.0) | round(2) %}
-        {% set vliv_indoor = (corr_indoor * gain_val) | round(2) %}
+        {% set vliv_spotu = vliv_spot_raw | float %}
+        {% set vliv_indoor = corr_indoor | float * gain_val | float %}
+        {% set vliv_ekvi = ekvi_posun | float %}
+        {% set vliv_cop = cop_bonus | float %}
         {{
           {
-            "verze": "2.9.6",
-            "celkovy_offset": offset_final | int,
-            "surovy_vypocet": raw_calc | round(2),
-            "stupnominuty": dm_val | int,
-            "slozky": {
-              "zaklad_ekviterm": ekvi_posun | round(2),
-              "vliv_ceny_spot": vliv_spotu,
-              "preheat_bonus": preheat_bonus,
-              "solar_malus": solar_malus,
-              "rain_bonus": rain_bonus,
-              "humidity_bonus": humidity_bonus,
-              "forecast_bonus": forecast_bonus,
-              "vnitrni_korekce": vliv_indoor,
-              "bonus_6h_blok": bonus_6h | float
+            "metadata": {
+              "verze": "4.3 + COP",
+              "timestamp": now().isoformat(),
+              "pocet_slozek": 8
             },
-            "ceny": {
-              "aktualni": cena_ted | round(2),
-              "za_2h": cena_budoucich | round(2),
-              "prvni_3h": (all_prices[:3] if all_prices is iterable else []) | list,
-              "tomorrow_available": (tomorrow_prices is iterable)
+            "offset": {
+              "finalni": offset_final | int,
+              "aktualni": off_curr | int,
+              "zmena": offset_final | int - off_curr | int,
+              "surovy_vypocet": raw_calc | round(3)
             },
-            "guard": {
-              "max_step": max_step | int,
-              "effective_min_change": effective_min_change | int
+            "vstupni_senzory": {
+              "spot_price": {"hodnota": cena_ted | round(3), "jednotka": "Kč/kWh"},
+              "venkovni_teplota": {"hodnota": t_out | round(2), "stav_pocasi": stav_pocasi},
+              "vnitrni_teplota": {"hodnota": t_in | round(2), "rozdil": temp_diff | round(3)},
+              "stupnominuty": {"hodnota": dm_val | round(0), "alarm": dm_val | float < -800},
+              "cop": {
+                "entita": cop_ent,
+                "hodnota": cop_value | float | round(2),
+                "nakonfigurovano": cop_ent != 'none',
+                "kvalita": "Výborný" if cop_value | float > 7.0 else ("Velmi dobrý" if cop_value | float > 6.5 else ("Dobrý" if cop_value | float > 6.0 else ("Průměrný" if cop_value | float > 5.0 else ("Slabý" if cop_value | float > 4.0 else "Velmi slabý (mráz)"))))
+              }
             },
-            "eeprom_guard": {
-              "min_interval_min": min_write_interval_min | int,
-              "minutes_since_write": minutes_since_write | float,
-              "allow_write_by_time": allow_write_by_time,
-              "comfort_override": comfort_override,
-              "last_write_helper": last_write_ent
+            "vypocet_offsetu": {
+              "celkovy_soucet": raw_calc | round(3),
+              "rozpad_slozek": {
+                "1_vliv_spot_ceny": {
+                  "hodnota": vliv_spotu | round(3),
+                  "vzorec": "(-0.8 × cena) + 4.0",
+                  "vypocet": "(-0.8 × " ~ (cena_ted | round(2)) ~ ") + 4.0",
+                  "procento_z_celku": ((vliv_spotu / raw_calc * 100) if raw_calc != 0 else 0) | round(1)
+                },
+                "2_ekvitermni_posun": {
+                  "hodnota": vliv_ekvi | round(3),
+                  "vzorec": "(0 - t_out) / 10 pokud t_out < 5°C",
+                  "aktivni": t_out < 5,
+                  "procento_z_celku": ((vliv_ekvi / raw_calc * 100) if raw_calc != 0 else 0) | round(1)
+                },
+                "3_vnitrni_korekce": {
+                  "hodnota": vliv_indoor | round(3),
+                  "zakladni_korekce": corr_indoor | float | round(3),
+                  "gain": gain_val | round(2),
+                  "procento_z_celku": ((vliv_indoor / raw_calc * 100) if raw_calc != 0 else 0) | round(1)
+                },
+                "4_bonus_6h_blok": {
+                  "hodnota": bonus_6h | float | round(3),
+                  "aktivni": bonus_6h | float != 0,
+                  "nakonfigurovano": cheap_ent != 'none',
+                  "entita": cheap_ent,
+                  "stav": is_state(cheap_ent, 'on') if cheap_ent != 'none' else false,
+                  "procento_z_celku": ((bonus_6h | float / raw_calc * 100) if raw_calc != 0 else 0) | round(1)
+                },
+                "5_preheat_bonus": {
+                  "hodnota": preheat_bonus | float | round(3),
+                  "cena_za_4h": cena_preheat | round(3),
+                  "cena_aktualni": cena_ted | round(3),
+                  "pomer": ((cena_preheat / cena_ted) if cena_ted > 0 else 0) | round(2),
+                  "aktivni": preheat_bonus | float != 0,
+                  "procento_z_celku": ((preheat_bonus | float / raw_calc * 100) if raw_calc != 0 else 0) | round(1)
+                },
+                "6_solar_malus": {
+                  "hodnota": solar_malus | float | round(3),
+                  "stav_pocasi": stav_pocasi,
+                  "aktivni": solar_malus | float != 0,
+                  "procento_z_celku": ((solar_malus | float / raw_calc * 100) if raw_calc != 0 else 0) | round(1)
+                },
+                "7_forecast_bonus": {
+                  "hodnota": forecast_bonus | float | round(3),
+                  "trend": trend_val | round(3),
+                  "procento_z_celku": ((forecast_bonus | float / raw_calc * 100) if raw_calc != 0 else 0) | round(1)
+                },
+                "8_cop_bonus": {
+                  "hodnota": vliv_cop | round(3),
+                  "cop": cop_value | float | round(2),
+                  "nakonfigurovano": cop_ent != 'none',
+                  "vzorec": "COP >7.0→-0.8, >6.5→-0.5, >6.0→-0.3, <4.0→+0.8, <5.0→+0.5",
+                  "logika": "Vysoký COP = TČ efektivní → snížit offset. Nízký COP = mráz/neefektivní → zvýšit offset",
+                  "aktivni": vliv_cop != 0,
+                  "procento_z_celku": ((vliv_cop / raw_calc * 100) if raw_calc != 0 else 0) | round(1)
+                }
+              },
+              "kontrolni_soucet": (vliv_spotu + vliv_ekvi + vliv_indoor + (bonus_6h | float) + (preheat_bonus | float) + (solar_malus | float) + (forecast_bonus | float) + vliv_cop) | round(3)
             },
-            "teploty": {
-              "venkovni": t_out,
-              "vnitrni": t_in,
-              "cilova": target_temp_var
+            "ochrana_a_limity": {
+              "dm_guard": {"stupnominuty": dm_val | round(0), "max_step": max_step | int},
+              "eeprom_ochrana": {"minut_od_zapisu": minutes_since_write | float, "write_allowed": allow_write_by_time or comfort_override}
             },
-            "pocasi": {
-              "stav": stav_pocasi,
-              "vlhkost": humidity,
-              "trend_6h": trend_val
+            "rozhodnuti": {
+              "kontroly": {
+                "senzory_dostupne": states(spot_ent) != 'unavailable' and states(weather_ent) != 'unavailable',
+                "dostatecna_zmena": (off_curr | int - offset_final | int) | abs >= effective_min_change | int
+              }
             }
           } | tojson
         }}
       retain: true
 
-  - choose:
-      - conditions:
-          - condition: template
-            value_template: "{{ all_prices is not iterable or (all_prices | length) == 0 }}"
-        sequence:
-          - service: logbook.log
-            data:
-              name: "NIBE Debug"
-              message: "Chybí spot ceny (today/tomorrow nejsou k dispozici nebo mají nečekaný formát)."
-              entity_id: "{{ spot_ent }}"
+  - service: logbook.log
+    data:
+      name: "NIBE v4.3"
+      message: >
+        Offset={{ offset_final | int }} ({{ offset_final | int - off_curr | int }}),
+        raw={{ raw_calc | round(2) }}, COP={{ cop_value | round(2) }}, 8 složek
+      entity_id: "{{ spot_ent }}"
 
   - condition: template
     value_template: "{{ hdo_ent == 'none' or is_state(hdo_ent, 'on') }}"
-
   - condition: template
-    value_template: "{{ states(spot_ent) != 'unavailable' and states(weather_ent) != 'unavailable' and states(dm_ent) != 'unavailable' and states(in_temp_ent) != 'unavailable' and states(curr_off_ent) != 'unavailable' }}"
-
+    value_template: "{{ states(spot_ent) != 'unavailable' }}"
   - condition: template
     value_template: "{{ (off_curr | int - offset_final | int) | abs >= effective_min_change | int }}"
-
   - condition: template
     value_template: "{{ allow_write_by_time or comfort_override }}"
 
