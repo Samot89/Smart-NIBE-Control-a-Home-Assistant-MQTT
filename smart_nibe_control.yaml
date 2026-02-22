@@ -1,16 +1,9 @@
 blueprint:
-  name: Smart NIBE – v4.4
+  name: Smart NIBE – v4.3 (+ COP)
   description: |
     Adaptivní řízení offsetu tepelného čerpadla NIBE.
 
-    **v4.4 – Konfigurovatelné parametry:**
-    - 📉 Spot price koeficienty (slope/intercept) jsou nyní nastavitelné
-    - 💰 Práh ceny pro předehřev konfigurovatelný (není vázáno na CZK)
-    - 📊 Poměr ceny pro aktivaci předehřevu
-    - ⏩ Výhled předehřevu (hodiny)
-    - 🛡️ Alarm stupňominut konfigurovatelný
-
-    **v4.3 – COP bonus:**
+    **v4.3 - Nové funkce:**
     - 🔋 COP bonus - optimalizace podle účinnosti TČ
     - ✅ 8 složek výpočtu
     - 📊 Detailní MQTT debug
@@ -20,7 +13,6 @@ blueprint:
     - 5.0–6.0 → neutrální
     - <5.0 → +0.5 | <4.0 → +0.8 (mráz)
   domain: automation
-  source_url: https://github.com/Samot89/Smart-NIBE-Control-a-Home-Assistant-MQTT
   input:
     # ==========================================
     # ZÁKLADNÍ SENZORY
@@ -76,14 +68,14 @@ blueprint:
           domain: sensor
 
     # ==========================================
-    # COP SENZOR
+    # COP SENZOR v4.3
     # ==========================================
     cop_sensor:
       name: 🔋 COP sensor (Coefficient of Performance)
       description: >
         Volitelné - sensor.nibe_cop_nibe_cop_heat_2
         Hodnoty typicky 4.0–7.5 pro NIBE ground-source.
-        Prahy: >7.0→-0.8, >6.5→-0.5, >6.0→-0.3, <4.0→+0.8, <5.0→+0.5
+        Prahy: >7.0→-0.8, >6.5→-0.5, >6.0→-0.3, <5.0→+0.5, <4.0→+0.8
       default: none
       selector:
         entity:
@@ -103,84 +95,6 @@ blueprint:
       selector:
         entity:
           domain: input_number
-
-    # ==========================================
-    # SPOT PRICE KOEFICIENTY
-    # ==========================================
-    spot_slope:
-      name: 📉 Spot – koeficient (slope)
-      description: >
-        Záporná hodnota: dražší elektřina → nižší offset.
-        Vzorec: (slope × cena) + intercept. Výchozí: -0.8
-      default: -0.8
-      selector:
-        number:
-          min: -3.0
-          max: 0.0
-          step: 0.1
-
-    spot_intercept:
-      name: 📈 Spot – základní hodnota (intercept)
-      description: >
-        Přičítá se k výsledku. Vzorec: (slope × cena) + intercept.
-        Výchozí: 4.0
-      default: 4.0
-      selector:
-        number:
-          min: 0.0
-          max: 10.0
-          step: 0.5
-
-    # ==========================================
-    # PŘEDEHŘEV
-    # ==========================================
-    preheat_price_threshold:
-      name: 💰 Max. cena pro předehřev (měnová jednotka/kWh)
-      description: >
-        Předehřev se aktivuje jen když je aktuální cena pod tímto prahem.
-        Výchozí: 2.5 (přizpůsobit své měně a trhu)
-      default: 2.5
-      selector:
-        number:
-          min: 0.5
-          max: 30.0
-          step: 0.5
-
-    preheat_ratio:
-      name: 📊 Poměr ceny pro aktivaci předehřevu
-      description: >
-        Předehřev se aktivuje pokud budoucí cena je ≥ X× aktuální.
-        Výchozí: 1.3 = 30% nárůst.
-      default: 1.3
-      selector:
-        number:
-          min: 1.1
-          max: 3.0
-          step: 0.05
-
-    preheat_look_ahead_hours:
-      name: ⏩ Výhled předehřevu (hodiny)
-      description: "Kolik hodin dopředu se sleduje cena pro předehřev. Výchozí: 4"
-      default: 4
-      selector:
-        number:
-          min: 1
-          max: 8
-
-    # ==========================================
-    # OCHRANA
-    # ==========================================
-    degree_minutes_guard:
-      name: 🛡️ Alarm stupňominut
-      description: >
-        Pod touto hodnotou se omezí maximální krok změny offsetu na 1 (místo 2).
-        Výchozí: -800. Upravit pro jiný model NIBE.
-      default: -800
-      selector:
-        number:
-          min: -2000
-          max: -100
-          step: 50
 
     # ==========================================
     # MQTT
@@ -278,14 +192,7 @@ action:
       min_off_limit: !input min_offset
       min_change_limit: !input min_change
       min_write_interval_min: !input min_write_interval_minutes
-      # Konfigurovatelné parametry (nové v v4.4)
-      spot_slope_var: !input spot_slope
-      spot_intercept_var: !input spot_intercept
-      preheat_price_threshold_var: !input preheat_price_threshold
-      preheat_ratio_var: !input preheat_ratio
-      preheat_look_ahead: !input preheat_look_ahead_hours
-      dm_guard_var: !input degree_minutes_guard
-      # Odvozené hodnoty ze senzorů
+      preheat_look_ahead: 4
       trend_val: "{{ states(trend_ent) | float(0) }}"
       t_out_raw: "{{ state_attr(weather_ent, 'temperature') | float(0) }}"
       t_in: "{{ states(in_temp_ent) | float(target_temp_var) }}"
@@ -359,10 +266,9 @@ action:
         {% else %}{{ cena_ted }}{% endif %}
 
   - variables:
-      # 1. PREHEAT BONUS – práh ceny a poměr konfigurovatelné
+      # 1. PREHEAT BONUS
       preheat_bonus: >
-        {% if cena_preheat | float > (cena_ted | float * preheat_ratio_var | float)
-           and cena_ted | float < preheat_price_threshold_var | float %}
+        {% if cena_preheat | float > (cena_ted | float * 1.3) and cena_ted | float < 2.5 %}
           1.5
         {% else %}0.0{% endif %}
 
@@ -399,15 +305,15 @@ action:
 
       # 6. BONUS 6H
       bonus_6h: >
-        {% if cheap_ent != 'none' and is_state(cheap_ent, 'on') %}1.0
+        {% if cheap_ent is not none and is_state(cheap_ent, 'on') %}1.0
         {% else %}0{% endif %}
 
-      # 7. VLIV SPOT – koeficienty konfigurovatelné
-      vliv_spot_raw: "{{ (spot_slope_var | float * cena_ted | float) + spot_intercept_var | float }}"
+      # 7. VLIV SPOT
+      vliv_spot_raw: "{{ (-0.8 * cena_ted | float) + 4.0 }}"
 
       # 8. COP BONUS – prahy pro NIBE ground-source (rozsah 4.0–7.5)
       cop_value: >
-        {% if cop_ent == 'none' %}
+        {% if cop_ent is none %}
           6.0
         {% else %}
           {{ states(cop_ent) | float(6.0) }}
@@ -435,8 +341,7 @@ action:
            (corr_indoor | float * gain_val | float) + preheat_bonus | float +
            solar_malus | float + forecast_bonus | float + cop_bonus | float }}
 
-      # Alarm stupňominut – konfigurovatelný práh (v4.4)
-      max_step: "{% if dm_val | float < dm_guard_var | float %}1{% else %}2{% endif %}"
+      max_step: "{% if dm_val | float < -800 %}1{% else %}2{% endif %}"
 
       clamped_calc: >
         {% set val = raw_calc | float %}
@@ -460,7 +365,7 @@ action:
 
   - variables:
       last_write_ts: >
-        {% if last_write_ent == 'none' %}0
+        {% if last_write_ent is none %}0
         {% else %}
           {% set dt = state_attr(last_write_ent, 'datetime') %}
           {% if dt is none %}{% set dt = states(last_write_ent) %}{% endif %}
@@ -469,7 +374,7 @@ action:
       minutes_since_write: "{{ ((now_ts - last_write_ts) / 60) | round(1) }}"
       comfort_override: "{{ temp_diff | float | abs >= 0.7 }}"
       allow_write_by_time: >
-        {{ last_write_ent == 'none' or
+        {{ last_write_ent is none or
            minutes_since_write | float >= min_write_interval_min | float }}
 
   # MQTT DEBUG
@@ -484,17 +389,9 @@ action:
         {{
           {
             "metadata": {
-              "verze": "4.4",
+              "verze": "4.3 + COP",
               "timestamp": now().isoformat(),
               "pocet_slozek": 8
-            },
-            "konfigurace": {
-              "spot_slope": spot_slope_var | float,
-              "spot_intercept": spot_intercept_var | float,
-              "preheat_price_threshold": preheat_price_threshold_var | float,
-              "preheat_ratio": preheat_ratio_var | float,
-              "preheat_look_ahead_h": preheat_look_ahead | int,
-              "dm_guard_threshold": dm_guard_var | float
             },
             "offset": {
               "finalni": offset_final | int,
@@ -503,14 +400,14 @@ action:
               "surovy_vypocet": raw_calc | round(3)
             },
             "vstupni_senzory": {
-              "spot_price": {"hodnota": cena_ted | round(3), "jednotka": "měnová jednotka/kWh"},
+              "spot_price": {"hodnota": cena_ted | round(3), "jednotka": "Kč/kWh"},
               "venkovni_teplota": {"hodnota": t_out | round(2), "stav_pocasi": stav_pocasi},
               "vnitrni_teplota": {"hodnota": t_in | round(2), "rozdil": temp_diff | round(3)},
-              "stupnominuty": {"hodnota": dm_val | round(0), "alarm": dm_val | float < dm_guard_var | float},
+              "stupnominuty": {"hodnota": dm_val | round(0), "alarm": dm_val | float < -800},
               "cop": {
                 "entita": cop_ent,
                 "hodnota": cop_value | float | round(2),
-                "nakonfigurovano": cop_ent != 'none',
+                "nakonfigurovano": cop_ent is not none,
                 "kvalita": "Výborný" if cop_value | float > 7.0 else ("Velmi dobrý" if cop_value | float > 6.5 else ("Dobrý" if cop_value | float > 6.0 else ("Průměrný" if cop_value | float > 5.0 else ("Slabý" if cop_value | float > 4.0 else "Velmi slabý (mráz)"))))
               }
             },
@@ -519,8 +416,8 @@ action:
               "rozpad_slozek": {
                 "1_vliv_spot_ceny": {
                   "hodnota": vliv_spotu | round(3),
-                  "vzorec": "(" ~ (spot_slope_var | float) ~ " × cena) + " ~ (spot_intercept_var | float),
-                  "vypocet": "(" ~ (spot_slope_var | float) ~ " × " ~ (cena_ted | round(2)) ~ ") + " ~ (spot_intercept_var | float),
+                  "vzorec": "(-0.8 × cena) + 4.0",
+                  "vypocet": "(-0.8 × " ~ (cena_ted | round(2)) ~ ") + 4.0",
                   "procento_z_celku": ((vliv_spotu / raw_calc * 100) if raw_calc != 0 else 0) | round(1)
                 },
                 "2_ekvitermni_posun": {
@@ -538,14 +435,14 @@ action:
                 "4_bonus_6h_blok": {
                   "hodnota": bonus_6h | float | round(3),
                   "aktivni": bonus_6h | float != 0,
-                  "nakonfigurovano": cheap_ent != 'none',
+                  "nakonfigurovano": cheap_ent is not none,
                   "entita": cheap_ent,
-                  "stav": is_state(cheap_ent, 'on') if cheap_ent != 'none' else false,
+                  "stav": is_state(cheap_ent, 'on') if cheap_ent is not none else false,
                   "procento_z_celku": ((bonus_6h | float / raw_calc * 100) if raw_calc != 0 else 0) | round(1)
                 },
                 "5_preheat_bonus": {
                   "hodnota": preheat_bonus | float | round(3),
-                  "cena_za_Xh": cena_preheat | round(3),
+                  "cena_za_4h": cena_preheat | round(3),
                   "cena_aktualni": cena_ted | round(3),
                   "pomer": ((cena_preheat / cena_ted) if cena_ted > 0 else 0) | round(2),
                   "aktivni": preheat_bonus | float != 0,
@@ -565,7 +462,7 @@ action:
                 "8_cop_bonus": {
                   "hodnota": vliv_cop | round(3),
                   "cop": cop_value | float | round(2),
-                  "nakonfigurovano": cop_ent != 'none',
+                  "nakonfigurovano": cop_ent is not none,
                   "vzorec": "COP >7.0→-0.8, >6.5→-0.5, >6.0→-0.3, <4.0→+0.8, <5.0→+0.5",
                   "logika": "Vysoký COP = TČ efektivní → snížit offset. Nízký COP = mráz/neefektivní → zvýšit offset",
                   "aktivni": vliv_cop != 0,
@@ -575,7 +472,7 @@ action:
               "kontrolni_soucet": (vliv_spotu + vliv_ekvi + vliv_indoor + (bonus_6h | float) + (preheat_bonus | float) + (solar_malus | float) + (forecast_bonus | float) + vliv_cop) | round(3)
             },
             "ochrana_a_limity": {
-              "dm_guard": {"stupnominuty": dm_val | round(0), "threshold": dm_guard_var | float, "max_step": max_step | int},
+              "dm_guard": {"stupnominuty": dm_val | round(0), "max_step": max_step | int},
               "eeprom_ochrana": {"minut_od_zapisu": minutes_since_write | float, "write_allowed": allow_write_by_time or comfort_override}
             },
             "rozhodnuti": {
@@ -590,14 +487,14 @@ action:
 
   - service: logbook.log
     data:
-      name: "NIBE v4.4"
+      name: "NIBE v4.3"
       message: >
         Offset={{ offset_final | int }} ({{ offset_final | int - off_curr | int }}),
         raw={{ raw_calc | round(2) }}, COP={{ cop_value | round(2) }}, 8 složek
       entity_id: "{{ spot_ent }}"
 
   - condition: template
-    value_template: "{{ hdo_ent == 'none' or is_state(hdo_ent, 'on') }}"
+    value_template: "{{ hdo_ent is none or is_state(hdo_ent, 'on') }}"
   - condition: template
     value_template: "{{ states(spot_ent) != 'unavailable' }}"
   - condition: template
@@ -613,7 +510,7 @@ action:
   - choose:
       - conditions:
           - condition: template
-            value_template: "{{ last_write_ent != 'none' }}"
+            value_template: "{{ last_write_ent is not none }}"
         sequence:
           - service: input_datetime.set_datetime
             data:
