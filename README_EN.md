@@ -1,6 +1,6 @@
-# Smart NIBE Control via Home Assistant (MQTT)
+# 🌡️ Smart NIBE Control – Home Assistant Blueprint
 
-An **adaptive, high-level control system** for NIBE heat pumps using  
+An **adaptive, high-level control system** for NIBE heat pumps using
 **Home Assistant** and **MQTT**.
 
 This project dynamically adjusts the **heat curve offset (Modbus register 47011)**
@@ -9,18 +9,21 @@ heat pump protection — **without switching the compressor on/off**.
 
 Think of it as a *brain*, not a switch.
 
+[![Import Blueprint](https://my.home-assistant.io/badges/blueprint_import.svg)](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https://raw.githubusercontent.com/Samot89/Smart-NIBE-Control-a-Home-Assistant-MQTT/main/smart_nibe_control.yaml)
+
 ---
 
 ## ✨ Key Features
 
 - Adaptive control of **heat curve offset** (Modbus 47011)
 - Optimization based on **spot electricity prices**
-- **Look-ahead price prediction** (preheating before price spikes)
+- **Look-ahead price prediction** (preheating before price spikes, configurable 1–8 h)
 - **Outdoor temperature (equithermal / weather-compensated logic)**
 - **Indoor temperature feedback** (comfort-first)
 - **Solar gain reduction** (sunny weather awareness)
-- **Degree Minutes protection (DM Guard)**
+- **Degree Minutes protection (DM Guard)** – configurable threshold
 - **Smooth ramping (slew rate limiting)** to protect the compressor
+- **Configurable spot price formula** (slope + intercept)
 - Optional **HDO / grid signal support**
 - Communication via **MQTT / nibepi**
 - Full transparency via **debug MQTT logs**
@@ -35,11 +38,11 @@ Think of it as a *brain*, not a switch.
 - Only the **heat curve offset** is adjusted
 - Designed primarily for **underfloor heating systems**
 
-This is **not a hack** — it is a *layer above* the manufacturer’s logic.
+This is **not a hack** — it is a *layer above* the manufacturer's logic.
 
 ---
 
-## 🔄 How the Automation Works (FINAL v2.9.5)
+## 🔄 How the Automation Works (v4.4)
 
 This automation acts as the **central decision engine** for heating.
 It combines **economics, building physics, comfort feedback, and hardware protection**.
@@ -48,9 +51,9 @@ It combines **economics, building physics, comfort feedback, and hardware protec
 
 The base heat demand is derived from **outdoor temperature**:
 
-- colder outside → higher base offset  
-- milder weather → lower base offset  
-- fully aligned with NIBE’s equithermal philosophy  
+- colder outside → higher base offset
+- milder weather → lower base offset
+- fully aligned with NIBE's equithermal philosophy
 
 This ensures stable behavior even during severe frost.
 
@@ -60,19 +63,22 @@ This ensures stable behavior even during severe frost.
 
 The equithermal base is adjusted according to the **current electricity price**:
 
-- **cheap electricity** → increase offset (thermal storage)  
-- **expensive electricity** → reduce offset (load shedding)  
+- **cheap electricity** → increase offset (thermal storage)
+- **expensive electricity** → reduce offset (load shedding)
 
 The building itself becomes a **thermal battery**.
+
+The formula coefficients (`spot_slope`, `spot_intercept`) are now **fully configurable**,
+making the blueprint currency-independent.
 
 ---
 
 ### 3️⃣ Look-ahead Preheating (Price Prediction)
 
-The automation looks **~2 hours ahead**:
+The automation looks **ahead** by a configurable number of hours (1–8 h, default 4 h):
 
-- if prices are expected to rise by **~30% or more**
-- and current prices are still low
+- if prices are expected to rise by a configurable ratio (default **~30%**)
+- and current prices are below a configurable threshold
 - **preheating is activated proactively**
 
 Built-in safeguards prevent failures when price data is missing or incomplete.
@@ -94,8 +100,8 @@ This prevents overheating and improves overall efficiency.
 
 The system continuously evaluates **indoor temperature**:
 
-- warmer than target → offset is reduced  
-- colder than target → offset is increased  
+- warmer than target → offset is reduced
+- colder than target → offset is increased
 
 This correction:
 - is scaled by an adjustable **response gain**
@@ -110,9 +116,9 @@ Comfort always has higher priority than aggressive cost optimization.
 
 The automation monitors **Degree Minutes**:
 
-- when DM drops too low (e.g. below −500)
+- when DM drops below a configurable threshold (default −800)
 - ramp-up speed is reduced
-- prevents reaching −700 and triggering electric backup heating
+- prevents triggering electric backup heating
 
 This protects:
 - COP efficiency
@@ -159,7 +165,7 @@ Every action is logged via MQTT (`nibe/debug/offset_calc`), enabling:
 - ❌ It does NOT chase temperature in 0.1 °C steps
 - ❌ It does NOT react hysterically to short-term fluctuations
 
-If you want *“cheap = ON, expensive = OFF”* logic,  
+If you want *"cheap = ON, expensive = OFF"* logic,
 this is **not** the right project.
 
 ---
@@ -183,7 +189,7 @@ this is **not** the right project.
 ### 🧯 Electric heater activates
 - Verify Degree Minutes sensor
 - Ensure DM Guard is active
-- Reduce ramp-up limits
+- Lower the `degree_minutes_guard` threshold
 
 ### 📉 Automation seems inactive
 - Offset change may be below threshold
@@ -192,22 +198,17 @@ this is **not** the right project.
 
 ---
 
-## 🏗 System Architecture
-
 ## 🔄 Decision Flow Diagram
-
-The diagram below shows how the automation evaluates inputs and decides
-the final heat curve offset.
 
 ```mermaid
 flowchart TD
-    A[Start – every hour + 2 minutes] --> B[Load input data]
+    A[Start – every 2 minutes] --> B[Load input data]
     B --> C{Data valid?}
     C -- no --> Z[Fallback<br/>keep current state]
     C -- yes --> D[Equithermal base<br/>outdoor temperature]
 
     D --> E[Spot price optimization]
-    E --> F{Price increase > 30%?}
+    E --> F{Price increase > configured ratio?}
     F -- yes --> G[Preheating<br/>look-ahead bonus]
     F -- no --> H[No preheating]
 
@@ -240,26 +241,27 @@ For detailed information, please refer to the following documentation:
 - **[NIBE / nibepi](docs/nibe-nibepi.md)** - NIBE heat pump and nibepi bridge setup
 - **[Dashboard](DASHBOARD.md)** - Dashboard setup and configuration
 - **[Helpers](Helpery.md)** - Helper entities and their usage
+- **[Changelog](CHANGELOG.md)** - Version history
 
 ---
 
 ## 📋 Requirements
 
-- NIBE heat pump (F-series)
+- NIBE heat pump (F-series or S-series)
 - Home Assistant
-- MQTT broker
+- MQTT broker (e.g. Mosquitto)
 - nibepi or compatible Modbus-MQTT bridge
-- Spot electricity price integration
-- Weather integration (e.g., Open-Meteo)
+- Spot electricity price integration (Nordpool, Tibber, OTE…)
+- Weather integration (e.g. Open-Meteo)
 - Indoor temperature sensor
 
 ---
 
 ## 🚀 Installation
 
-1. Install the automation blueprint in Home Assistant
+1. Click the **Import Blueprint** button above
 2. Configure required entities (spot price, weather, sensors)
-3. Set up helper entities (input_number helpers)
+3. Set up helper entities (input_number helpers) – see [Helpery.md](Helpery.md)
 4. Configure MQTT topics for your nibepi/bridge
 5. Adjust parameters according to your house characteristics
 6. Monitor and fine-tune over several days
@@ -268,7 +270,7 @@ For detailed information, please refer to the following documentation:
 
 ## ⚖️ License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+This project is licensed under the MIT License – see the [LICENSE](LICENSE) file for details.
 
 ---
 
@@ -277,4 +279,4 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 - NIBE for providing Modbus access to their heat pumps
 - [nibepi project](https://github.com/anerdins/nibepi) for the MQTT-Modbus bridge
 - Home Assistant community for integrations and support
-
+- [Community discussion](https://community.home-assistant.io/t/smart-nibe-ultra-adaptive-heat-curve-control-mqtt-spot-prices/975863)

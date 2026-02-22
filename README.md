@@ -1,6 +1,17 @@
-## 🧠 Jak automatizace funguje FINAL 
+# 🌡️ Smart NIBE Control – Home Assistant Blueprint
 
-Tato automatizace funguje jako **centrální „mozek“ vytápění**.
+Adaptivní řízení tepelného čerpadla NIBE přes Home Assistant a MQTT.
+Systém dynamicky upravuje **offset tepelné křivky (Modbus registr 47011)**
+podle spotových cen elektřiny, počasí, komfortu a ochrany zařízení –
+**bez přímého zapínání a vypínání kompresoru**.
+
+[![Importovat Blueprint](https://my.home-assistant.io/badges/blueprint_import.svg)](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https://raw.githubusercontent.com/Samot89/Smart-NIBE-Control-a-Home-Assistant-MQTT/main/smart_nibe_control.yaml)
+
+---
+
+## 🧠 Jak automatizace funguje
+
+Tato automatizace funguje jako **centrální „mozek" vytápění**.
 Nedívá se pouze na jednu veličinu, ale **kombinuje ekonomiku, fyziku domu,
 komfort uživatelů a ochranu samotného tepelného čerpadla**.
 
@@ -31,17 +42,19 @@ Na ekvitermní základ je aplikována **spotová logika** podle aktuální ceny 
 
 Dům je tak využíván jako **tepelný akumulátor** místo drahé elektřiny.
 
+Koeficienty vzorce (`spot_slope`, `spot_intercept`) jsou nyní **plně konfigurovatelné**.
+
 ---
 
 ### 🔹 3️⃣ Předtopení – Look-ahead (predikce ceny)
 
-Automatizace se **dívá cca 2 hodiny dopředu** do budoucích cen elektřiny.
+Automatizace se **dívá dopředu** do budoucích cen elektřiny (konfigurovatelný výhled 1–8 hodin).
 
-- pokud vidí, že cena brzy vzroste o více než ~30 %
-- a aktuální cena je stále relativně nízká
+- pokud vidí, že cena brzy vzroste o nastavený poměr (výchozí ~30 %)
+- a aktuální cena je pod nastaveným prahem
 - aktivuje **předtopení**
 
-Dům se „nabije“ teplem **ještě před zdražením**,
+Dům se „nabije" teplem **ještě před zdražením**,
 čímž se sníží nutnost topit v drahých hodinách.
 
 Současně je implementována ochrana proti chybám dat
@@ -59,7 +72,7 @@ v denních hodinách:
 
 Výsledkem je:
 - méně přetápění
-- lepší využití „energie zdarma“
+- lepší využití „energie zdarma"
 
 ---
 
@@ -85,11 +98,9 @@ Komfort má vždy vyšší prioritu než slepé předtápění.
 
 Automatizace **neustále hlídá stupňominuty** (`degree_minutes`):
 
-- při hlubokém poklesu (např. pod −500)
+- při poklesu pod konfigurovatelný práh (výchozí −800)
   - se omezuje rychlost zvyšování výkonu
-- cílem je zabránit:
-  - pádu k −700
-  - sepnutí elektrické patrony
+- cílem je zabránit sepnutí elektrické patrony
 
 Tato ochrana výrazně přispívá k:
 - lepšímu COP
@@ -131,16 +142,17 @@ což umožňuje:
 
 ## 🧠 Shrnutí filozofie
 
-> Tato automatizace netopí „víc“ ani „míň“.  
+> Tato automatizace netopí „víc" ani „míň".
 > Topí **chytře, plynule a s ohledem na budoucnost**.
 
 Spojuje:
-- fyziku domu  
-- ekonomiku spotového trhu  
-- komfort obyvatel  
-- ochranu technologie  
+- fyziku domu
+- ekonomiku spotového trhu
+- komfort obyvatel
+- ochranu technologie
 
 a dělá to **bez hysterických zásahů a bez zbytečného opotřebení**.
+
 ```mermaid
 flowchart TD
     A[Start – každou hodinu + 2 min] --> B[Načtení vstupních dat]
@@ -149,7 +161,7 @@ flowchart TD
     C -- ano --> D[Ekvitermní základ]
 
     D --> E[Spotová optimalizace]
-    E --> F{Cena poroste > 30 %?}
+    E --> F{Cena poroste > prahový poměr?}
     F -- ano --> G[Předtopení]
     F -- ne --> H[Bez předtopení]
 
@@ -181,16 +193,17 @@ Pro detailní informace prosím nahlédněte do následující dokumentace:
 - **[NIBE / nibepi](docs/nibe-nibepi.md)** - Nastavení NIBE tepelného čerpadla a nibepi
 - **[Dashboard](DASHBOARD.md)** - Nastavení a konfigurace dashboardu
 - **[Helpery](Helpery.md)** - Pomocné entity a jejich použití
+- **[Changelog](CHANGELOG.md)** - Historie verzí
 
 ---
 
 ## 📋 Požadavky
 
-- Tepelné čerpadlo NIBE (F-série)
+- Tepelné čerpadlo NIBE (F-série nebo S-série)
 - Home Assistant
-- MQTT broker
+- MQTT broker (např. Mosquitto)
 - nibepi nebo kompatibilní Modbus-MQTT bridge
-- Integrace spotových cen elektřiny
+- Integrace spotových cen elektřiny (Nordpool, OTE, Tibber…)
 - Integrace počasí (např. Open-Meteo)
 - Čidlo vnitřní teploty
 
@@ -198,18 +211,18 @@ Pro detailní informace prosím nahlédněte do následující dokumentace:
 
 ## 🚀 Instalace
 
-1. Nainstalujte automatizační blueprint v Home Assistantu
-2. Nakonfigurujte požadované entity (spotová cena, počasí, senzory)
-3. Nastavte helper entity (input_number helpery)
-4. Nakonfigurujte MQTT témata pro váš nibepi/bridge
-5. Upravte parametry podle charakteristik vašeho domu
-6. Monitorujte a dolaďte po několik dní
+1. Klikni na tlačítko **Import Blueprint** výše
+2. Nakonfiguruj požadované entity (spotová cena, počasí, senzory)
+3. Nastav helper entity (input_number helpery) – viz [Helpery.md](Helpery.md)
+4. Nakonfiguruj MQTT témata pro váš nibepi/bridge
+5. Uprav parametry podle charakteristik vašeho domu
+6. Monitoruj a dolaď po několik dní
 
 ---
 
 ## ⚖️ Licence
 
-Tento projekt je licencován pod licencí MIT - viz soubor [LICENSE](LICENSE) pro detaily.
+Tento projekt je licencován pod licencí MIT – viz soubor [LICENSE](LICENSE) pro detaily.
 
 ---
 
@@ -218,5 +231,4 @@ Tento projekt je licencován pod licencí MIT - viz soubor [LICENSE](LICENSE) pr
 - NIBE za poskytnutí Modbus přístupu k tepelným čerpadlům
 - [nibepi projekt](https://github.com/anerdins/nibepi) za MQTT-Modbus bridge
 - Home Assistant komunita za integrace a podporu
-- [Import Blueprint](https://community.home-assistant.io/t/smart-nibe-ultra-adaptive-heat-curve-control-mqtt-spot-prices/975863)
-
+- [Diskuze na HA Community](https://community.home-assistant.io/t/smart-nibe-ultra-adaptive-heat-curve-control-mqtt-spot-prices/975863)
