@@ -309,7 +309,7 @@ action:
         {% else %}0{% endif %}
 
       # 7. VLIV SPOT
-      vliv_spot_raw: "{{ (-0.8 * cena_ted | float) + 4.0 }}"
+      vliv_spot_raw: "{{ (-0.3 * cena_ted | float) + 1.5 }}"
 
       # 8. COP BONUS – prahy pro NIBE ground-source (rozsah 4.0–7.5)
       cop_value: >
