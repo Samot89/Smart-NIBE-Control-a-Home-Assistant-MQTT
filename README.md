@@ -1,234 +1,164 @@
-# 🌡️ Smart NIBE Control – Home Assistant Blueprint
+# 🏠 Smart NIBE Control – Adaptivní řízení tepelného čerpadla
 
-Adaptivní řízení tepelného čerpadla NIBE přes Home Assistant a MQTT.
-Systém dynamicky upravuje **offset tepelné křivky (Modbus registr 47011)**
-podle spotových cen elektřiny, počasí, komfortu a ochrany zařízení –
-**bez přímého zapínání a vypínání kompresoru**.
+[![Verze](https://img.shields.io/badge/verze-v4.4-blue)](CHANGELOG.md)
+[![Platforma](https://img.shields.io/badge/Home%20Assistant-Blueprint-41BDF5?logo=homeassistant)](https://www.home-assistant.io/)
+[![Licence](https://img.shields.io/badge/licence-MIT-green)](LICENSE)
 
-[![Importovat Blueprint](https://my.home-assistant.io/badges/blueprint_import.svg)](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https://raw.githubusercontent.com/Samot89/Smart-NIBE-Control-a-Home-Assistant-MQTT/main/smart_nibe_control.yaml)
-
----
-
-## 🧠 Jak automatizace funguje
-
-Tato automatizace funguje jako **centrální „mozek" vytápění**.
-Nedívá se pouze na jednu veličinu, ale **kombinuje ekonomiku, fyziku domu,
-komfort uživatelů a ochranu samotného tepelného čerpadla**.
-
-Cílem není maximalizovat výkon ani slepě šetřit,
-ale **topit ve správný čas, správnou silou a bez zbytečného opotřebení**.
+Inteligentní blueprint pro Home Assistant, který adaptivně řídí tepelné čerpadlo NIBE prostřednictvím úpravy ekvitermní křivky (Modbus registr 47011). Systém **nepřepíná kompresor**, ale plynule optimalizuje tepelný výkon na základě 8 nezávislých vlivů.
 
 ---
 
-### 🔹 1️⃣ Ekvitermní základ (fyzika domu)
+## ✨ Co systém umí
 
-Základ řízení vychází z **venkovní teploty** (`outdoor_weather.temperature`).
-
-- při poklesu venkovní teploty se automaticky zvyšuje základní offset
-- při mírných teplotách se topný výkon přirozeně snižuje
-- systém respektuje původní **ekvitermní filozofii NIBE**
-
-To zajišťuje stabilní chování domu i při silných mrazech.
-
----
-
-### 🔹 2️⃣ Spotová optimalizace (ekonomika)
-
-Na ekvitermní základ je aplikována **spotová logika** podle aktuální ceny elektřiny
-(`spot_price`):
-
-- **levná elektřina** → zvýšení offsetu (akumulace tepla)
-- **drahá elektřina** → snížení offsetu (útlum výkonu)
-
-Dům je tak využíván jako **tepelný akumulátor** místo drahé elektřiny.
-
-Koeficienty vzorce (`spot_slope`, `spot_intercept`) jsou nyní **plně konfigurovatelné**.
+| Složka | Popis |
+|--------|-------|
+| 🌡️ **Ekviterma** | Základní výpočet z venkovní teploty |
+| ⚡ **Spot ceny** | Zvyšuje topení při levné elektřině, snižuje při drahé |
+| 🏠 **Vnitřní teplota** | Koriguje offset podle odchylky od cílové teploty |
+| ☀️ **Solární brzdění** | Omezuje topení v 9–15 h při slunečném počasí |
+| 🔮 **Předehřev** | Zahřeje dům 1–8 h před zdražením elektřiny |
+| 📊 **Stupňominuty** | Chrání kompresor a brání zapnutí bivalence |
+| 🌤️ **Forecast bonus** | Reaguje na předpověď počasí (ochlazování/oteplování) |
+| 🔧 **Plynulá změna** | Limituje skok offsetu na ±1 za hodinu |
 
 ---
 
-### 🔹 3️⃣ Předtopení – Look-ahead (predikce ceny)
+## 🧮 Jak to počítá
 
-Automatizace se **dívá dopředu** do budoucích cen elektřiny (konfigurovatelný výhled 1–8 hodin).
-
-- pokud vidí, že cena brzy vzroste o nastavený poměr (výchozí ~30 %)
-- a aktuální cena je pod nastaveným prahem
-- aktivuje **předtopení**
-
-Dům se „nabije" teplem **ještě před zdražením**,
-čímž se sníží nutnost topit v drahých hodinách.
-
-Současně je implementována ochrana proti chybám dat
-(výpadek nebo nekompletní cenová křivka).
-
----
-
-### 🔹 4️⃣ Solární brzda (pasivní zisky)
-
-Pokud aktuální stav počasí indikuje **jasno / slunečno**
-v denních hodinách:
-
-- automatizace **snižuje topný výkon**
-- počítá s pasivními solárními zisky přes okna
-
-Výsledkem je:
-- méně přetápění
-- lepší využití „energie zdarma"
-
----
-
-### 🔹 5️⃣ Vnitřní korekce – zpětná vazba (komfort)
-
-Automatizace neignoruje realitu uvnitř domu.
-
-Sleduje **vnitřní teplotu** (`indoor_temp`) a porovnává ji s cílem:
-
-- pokud je doma tepleji → offset se snižuje
-- pokud je doma chladněji → offset se zvyšuje
-
-Korekce:
-- je zesílena pomocí **response gain**
-- dlouhodobě posunuta pomocí **indoor bias**
-- nikdy nepřebíjí fyziku domu ani ochranné limity
-
-Komfort má vždy vyšší prioritu než slepé předtápění.
-
----
-
-### 🔹 6️⃣ Ochrana stupňominut – DM Guard
-
-Automatizace **neustále hlídá stupňominuty** (`degree_minutes`):
-
-- při poklesu pod konfigurovatelný práh (výchozí −800)
-  - se omezuje rychlost zvyšování výkonu
-- cílem je zabránit sepnutí elektrické patrony
-
-Tato ochrana výrazně přispívá k:
-- lepšímu COP
-- ochraně kompresoru
-- delší životnosti systému
-
----
-
-### 🔹 7️⃣ Plynulost změn – Slew Rate (mechanická ochrana)
-
-Automatizace **nikdy nemění offset skokově**:
-
-- maximální změna je omezená na cca ±1.0 za hodinu
-- při kritických stavech ještě méně
-- žádné náhlé skoky, žádné šoky
-
-Tím se udržují:
-- stabilní stupňominuty
-- plynulý chod kompresoru
-- klidné chování celé soustavy
-
----
-
-### 🔹 8️⃣ Ochrana zápisů a transparentnost
-
-Zápis do NIBE proběhne pouze tehdy, když:
-
-- změna offsetu je větší než nastavený práh (`min_change`)
-- HDO (pokud je použito) dovoluje provoz
-
-Každý zásah je zároveň **logován přes MQTT** (`nibe/debug/offset_calc`),
-což umožňuje:
-
-- zpětnou analýzu
-- ladění
-- prokazování přínosu regulace
-
----
-
-## 🧠 Shrnutí filozofie
-
-> Tato automatizace netopí „víc" ani „míň".
-> Topí **chytře, plynule a s ohledem na budoucnost**.
-
-Spojuje:
-- fyziku domu
-- ekonomiku spotového trhu
-- komfort obyvatel
-- ochranu technologie
-
-a dělá to **bez hysterických zásahů a bez zbytečného opotřebení**.
-
-```mermaid
-flowchart TD
-    A[Start – každou hodinu + 2 min] --> B[Načtení vstupních dat]
-    B --> C{Platná data?}
-    C -- ne --> Z[Použij aktuální stav<br/>bez agresivní změny]
-    C -- ano --> D[Ekvitermní základ]
-
-    D --> E[Spotová optimalizace]
-    E --> F{Cena poroste > prahový poměr?}
-    F -- ano --> G[Předtopení]
-    F -- ne --> H[Bez předtopení]
-
-    G --> I
-    H --> I
-
-    I[Solární brzda] --> J[Vnitřní korekce]
-    J --> K[DM Guard]
-    K --> L[Clamping]
-    L --> M[Slew Rate]
-
-    M --> N{Změna > min_change?}
-    N -- ne --> O[Nezapisuj]
-    N -- ano --> P[MQTT zápis<br/>47011]
+Výsledný offset se skládá ze součtu všech složek:
 
 ```
+offset = vliv_spot + vliv_ekvitermní + vliv_vnitřní × gain
+       + bonus_6h_blok + preheat_bonus − solar_malus
+       + forecast_bonus + cop_bonus
+```
 
----
+### Vliv spot cen (v4.4)
+```
+vliv_spot = (−0.3 × cena [Kč/kWh]) + 1.5
+```
 
-## 📚 Dokumentace
+| Cena elektřiny | Vliv na offset |
+|---------------|---------------|
+| 2 Kč/kWh | **+0.9** (mírně zvyšuje topení) |
+| 5 Kč/kWh | **0.0** (neutrální) |
+| 10 Kč/kWh | **−1.5** (mírně snižuje) |
 
-Pro detailní informace prosím nahlédněte do následující dokumentace:
+> 💡 **v4.4:** Vliv spot cen byl záměrně snížen 3× (dříve koef. −0.8/+4.0). Systém nyní dává přednost komfortu vnitřní teploty před agresivní optimalizací cen.
 
-- **[FAQ](docs/FAQ.md)** - Často kladené otázky
-- **[Architektura](docs/architecture.md)** - Přehled architektury systému
-- **[Komunikace](docs/communication.md)** - Detaily MQTT a Modbus komunikace
-- **[Diagramy](docs/diagrams.md)** - Diagramy systému
-- **[Home Assistant](docs/home-assistant.md)** - Konfigurace Home Assistant
-- **[NIBE / nibepi](docs/nibe-nibepi.md)** - Nastavení NIBE tepelného čerpadla a nibepi
-- **[Dashboard](DASHBOARD.md)** - Nastavení a konfigurace dashboardu
-- **[Helpery](Helpery.md)** - Pomocné entity a jejich použití
-- **[Changelog](CHANGELOG.md)** - Historie verzí
+### Vnitřní teplotní korekce
+```
+temp_diff = vnitřní_teplota − (cílová_teplota + indoor_bias)
+```
+Korekce je nelineární (±0.3, ±0.7, ±1.5) a násobí se `indoor_response_gain`.
 
 ---
 
 ## 📋 Požadavky
 
-- Tepelné čerpadlo NIBE (F-série nebo S-série)
-- Home Assistant
-- MQTT broker (např. Mosquitto)
-- nibepi nebo kompatibilní Modbus-MQTT bridge
-- Integrace spotových cen elektřiny (Nordpool, OTE, Tibber…)
-- Integrace počasí (např. Open-Meteo)
-- Čidlo vnitřní teploty
+- **Tepelné čerpadlo NIBE** (S-series, F-series s VVM 320/500)
+- **Home Assistant** 2024.1+
+- **MQTT broker** (Mosquitto)
+- **nibepi bridge** nebo ekvivalent pro Modbus–MQTT
+- **Spot ceny** – integrace např. Spotová cena CZ / Nordpool
+- **Venkovní teplota** – senzor nebo meteo integrace
+- **Vnitřní teplota** – senzor v obytném prostoru
 
 ---
 
 ## 🚀 Instalace
 
-1. Klikni na tlačítko **Import Blueprint** výše
-2. Nakonfiguruj požadované entity (spotová cena, počasí, senzory)
-3. Nastav helper entity (input_number helpery) – viz [Helpery.md](Helpery.md)
-4. Nakonfiguruj MQTT témata pro váš nibepi/bridge
-5. Uprav parametry podle charakteristik vašeho domu
-6. Monitoruj a dolaď po několik dní
+### 1. Import blueprintu
+```
+Nastavení → Automatizace → Blueprinty → Importovat blueprint
+```
+Zadej URL tohoto repozitáře nebo nahraj soubor `smart_nibe_control.yaml` ručně.
+
+### 2. Vytvoř helpery (input_number)
+
+| Helper | Min | Max | Krok | Doporučená hodnota |
+|--------|-----|-----|------|--------------------|
+| `input_number.indoor_bias` | −1.0 | 1.0 | 0.1 | **0.0** |
+| `input_number.indoor_response_gain` | 0.5 | 1.5 | 0.1 | **1.5** |
+| `input_number.weather_forecast_trend` | −10 | 10 | 0.1 | *(auto)* |
+| `input_number.weather_forecast_avg_6h` | −30 | 20 | 0.1 | *(auto)* |
+
+> ⚠️ `indoor_bias = 0.0` zajistí, že efektivní cílová teplota odpovídá nastavené hodnotě v termostatu. Záporné hodnoty způsobují pozdější reakci systému.
+
+### 3. Nakonfiguruj automatizaci
+Vytvoř novou automatizaci z blueprintu a přiřaď entity:
+- Senzor venkovní teploty
+- Senzor vnitřní teploty
+- Senzor cílové teploty
+- Senzor spot ceny elektřiny
+- Senzor stupňominut NIBE
+- Number entita tepelné křivky (např. `number.heat_offset_s1`)
+
+### 4. Volitelné: Dashboard
+Importuj připravené karty z [DASHBOARD.md](DASHBOARD.md).
 
 ---
 
-## ⚖️ Licence
+## ⚙️ Klíčové parametry
 
-Tento projekt je licencován pod licencí MIT – viz soubor [LICENSE](LICENSE) pro detaily.
+| Parametr | Popis | Doporučení |
+|----------|-------|------------|
+| `indoor_bias` | Systematická korekce cílové teploty | 0.0 (žádná korekce) |
+| `indoor_response_gain` | Citlivost korekce vnitřní teplotou | 1.5 (max) |
+| `offset_min` / `offset_max` | Rozsah výsledného offsetu | −3 / +3 |
+| `step_limit` | Max změna offsetu za hodinu | 1.0 |
+| `dm_threshold` | Práh stupňominut pro ochranu | −400 |
 
 ---
 
-## 🙏 Poděkování
+## 📊 MQTT senzory (debug)
 
-- NIBE za poskytnutí Modbus přístupu k tepelným čerpadlům
-- [nibepi projekt](https://github.com/anerdins/nibepi) za MQTT-Modbus bridge
-- Home Assistant komunita za integrace a podporu
-- [Diskuze na HA Community](https://community.home-assistant.io/t/smart-nibe-ultra-adaptive-heat-curve-control-mqtt-spot-prices/975863)
+Blueprint automaticky publikuje diagnostiku:
+
+```yaml
+sensor.nibe_offset_debug      # JSON s detailem všech složek
+sensor.nibe_vliv_spot_ceny    # Složka spot cen
+sensor.nibe_vliv_vnitrni_korekce  # Složka vnitřní teploty
+sensor.nibe_vliv_ekviterm     # Ekvitermní složka
+sensor.nibe_offset_finalni    # Výsledný offset před zápisem
+sensor.last_nibe_offset       # Naposledy zapsaný offset
+```
+
+---
+
+## 🖼️ Screenshoty
+
+![Dashboard přehled](Screenshot_1.png)
+![Detail offsetu](Screenshot_2.png)
+
+---
+
+## 📝 Changelog
+
+### v4.4 (2026-03-02)
+- **Vliv spot cen snížen 3×**: koeficient −0.8 → −0.3, offset +4.0 → +1.5
+- Vnitřní teplota nyní dominuje regulaci
+- Doporučení: `indoor_bias = 0.0`, `indoor_response_gain = 1.5`
+
+### v4.3
+- Přidán COP bonus (±0.8 dle účinnosti kompresoru)
+- Vylepšen forecast bonus
+
+### v4.0–v4.2
+- Ekvitermní výpočet, solární brzdění, 6h blok levné elektřiny
+
+Plný changelog → [CHANGELOG.md](CHANGELOG.md)
+
+---
+
+## 🤝 Poděkování
+
+- [NIBE](https://www.nibe.eu/) – výrobce tepelných čerpadel
+- [nibepi](https://github.com/anerdins/nibepi) – Modbus bridge
+- [Home Assistant](https://www.home-assistant.io/) komunita
+
+---
+
+## 📄 Licence
+
+MIT © [Samot89](https://github.com/Samot89)
