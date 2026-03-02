@@ -1,5 +1,12 @@
 # Changelog
 
+## [v4.4] – 2026-03-02
+
+### Změny
+- **Spot ceny: vliv snížen 3×** – koeficient -0.8 → -0.3, offset +4.0 → +1.5
+- Vnitřní teplota nyní dominuje regulaci (doporučeno: indoor_bias = 0.0)
+- Při ceně 10 Kč/kWh offset -1.5 místo -4.0 (dřívě příliš agresivní)
+
 All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
