@@ -1,21 +1,27 @@
 blueprint:
-  name: Smart NIBE – v4.3 (+ COP)
+  name: Smart NIBE – v4.4
   description: |
-    Adaptivní řízení offsetu tepelného čerpadla NIBE.
+    Adaptive heat pump offset control for NIBE via MQTT/Modbus.
 
-    **v4.3 - Nové funkce:**
-    - 🔋 COP bonus - optimalizace podle účinnosti TČ
-    - ✅ 8 složek výpočtu
-    - 📊 Detailní MQTT debug
+    **v4.4 – Changes:**
+    - ⚡ Spot price influence reduced 3× (coefficient −0.3, offset +1.5)
+    - Indoor temperature now dominates control
+    - Recommended: indoor_bias = 0.0, indoor_response_gain = 1.5
 
-    **COP prahy kalibrované pro NIBE ground-source (rozsah 4–7+):**
+    **v4.3 – Features:**
+    - 🔋 COP bonus – optimization based on heat pump efficiency
+    - ✅ 8 calculation components
+    - 📊 Detailed MQTT debug
+
+    **COP thresholds calibrated for NIBE ground-source (range 4–7+):**
     - >7.0 → -0.8 | >6.5 → -0.5 | >6.0 → -0.3
-    - 5.0–6.0 → neutrální
-    - <5.0 → +0.5 | <4.0 → +0.8 (mráz)
+    - 5.0–6.0 → neutral
+    - <5.0 → +0.5 | <4.0 → +0.8 (frost)
   domain: automation
+  source_url: https://github.com/Samot89/Smart-NIBE-Control-a-Home-Assistant-MQTT/blob/main/smart_nibe_control.yaml
   input:
     # ==========================================
-    # ZÁKLADNÍ SENZORY
+    # BASIC SENSORS
     # ==========================================
     spot_price:
       name: 💰 Spot price sensor
@@ -24,7 +30,7 @@ blueprint:
           domain: sensor
 
     cheap_block:
-      name: ⏰ Nejlevnější 6h blok
+      name: ⏰ Cheapest 6h block sensor
       default: none
       selector:
         entity:
@@ -43,55 +49,57 @@ blueprint:
           domain: weather
 
     indoor_temp:
-      name: 🏠 Vnitřní teplota
+      name: 🏠 Indoor temperature sensor
       selector:
         entity:
           domain: sensor
 
     forecast_trend:
-      name: 📈 Trend předpovědi počasí
+      name: 📈 Weather forecast trend
       selector:
         entity:
           domain: input_number
 
     hdo:
-      name: ⚡ HDO binary sensor
+      name: ⚡ HDO binary sensor (optional)
       default: none
       selector:
         entity:
           domain: binary_sensor
 
     current_offset:
-      name: 🎚️ Aktuální NIBE offset
+      name: 🎚️ Current NIBE offset sensor
       selector:
         entity:
           domain: sensor
 
     # ==========================================
-    # COP SENZOR v4.3
+    # COP SENSOR v4.3
     # ==========================================
     cop_sensor:
       name: 🔋 COP sensor (Coefficient of Performance)
       description: >
-        Volitelné - sensor.nibe_cop_nibe_cop_heat_2
-        Hodnoty typicky 4.0–7.5 pro NIBE ground-source.
-        Prahy: >7.0→-0.8, >6.5→-0.5, >6.0→-0.3, <5.0→+0.5, <4.0→+0.8
+        Optional – e.g. sensor.nibe_cop_heat_2.
+        Typical values 4.0–7.5 for NIBE ground-source.
+        Thresholds: >7.0→-0.8, >6.5→-0.5, >6.0→-0.3, <5.0→+0.5, <4.0→+0.8
       default: none
       selector:
         entity:
           domain: sensor
 
     # ==========================================
-    # ŘÍDÍCÍ PARAMETRY
+    # CONTROL PARAMETERS
     # ==========================================
     indoor_bias:
       name: 🎯 Indoor bias
+      description: Long-term systematic correction of target temperature (0.0 = no correction)
       selector:
         entity:
           domain: input_number
 
     response_gain:
       name: 📊 Response gain
+      description: Sensitivity multiplier for indoor temperature correction
       selector:
         entity:
           domain: input_number
@@ -100,7 +108,7 @@ blueprint:
     # MQTT
     # ==========================================
     mqtt_topic:
-      name: 📡 MQTT topic
+      name: 📡 MQTT topic (offset write)
       default: nibe/modbus/47011/set
       selector:
         text:
@@ -112,10 +120,10 @@ blueprint:
         text:
 
     # ==========================================
-    # LIMITY
+    # LIMITS
     # ==========================================
     target_temp:
-      name: 🌡️ Cílová vnitřní teplota
+      name: 🌡️ Target indoor temperature
       default: 21.5
       selector:
         number:
@@ -124,7 +132,7 @@ blueprint:
           step: 0.1
 
     max_offset:
-      name: ⬆️ Maximální offset
+      name: ⬆️ Maximum offset
       default: 6
       selector:
         number:
@@ -132,7 +140,7 @@ blueprint:
           max: 10
 
     min_offset:
-      name: ⬇️ Minimální offset
+      name: ⬇️ Minimum offset
       default: -3
       selector:
         number:
@@ -140,7 +148,7 @@ blueprint:
           max: -1
 
     min_change:
-      name: 🔄 Minimální změna offsetu
+      name: 🔄 Minimum offset change (dead band)
       default: 1
       selector:
         number:
@@ -148,7 +156,7 @@ blueprint:
           max: 5
 
     min_write_interval_minutes:
-      name: ⏱️ Minimální interval mezi zápisy
+      name: ⏱️ Minimum interval between writes (EEPROM protection)
       default: 45
       selector:
         number:
@@ -157,14 +165,14 @@ blueprint:
           step: 5
 
     last_write_helper:
-      name: 🕐 Helper pro poslední zápis
+      name: 🕐 Helper for last write timestamp
       default: none
       selector:
         entity:
           domain: input_datetime
 
     run_interval_minutes:
-      name: ⏰ Interval spouštění
+      name: ⏰ Run interval (minutes pattern)
       default: "/2"
       selector:
         text:
@@ -272,7 +280,7 @@ action:
           1.5
         {% else %}0.0{% endif %}
 
-      # 2. SOLAR MALUS
+      # 2. SOLAR MALUS (9:00–15:00 on sunny days)
       solar_malus: >
         {% if 9 <= now().hour <= 15 %}
           {% set state = stav_pocasi | lower %}
@@ -281,17 +289,17 @@ action:
           {% else %}0.0{% endif %}
         {% else %}0.0{% endif %}
 
-      # 3. FORECAST BONUS
+      # 3. FORECAST BONUS (based on weather trend)
       forecast_bonus: >
         {{ [[trend_val | float * -0.4, 1] | min, -1] | max | round(2) }}
 
-      # 4. EKVITERM
+      # 4. EQUITHERMAL SHIFT (outdoor temp below 5°C)
       ekvi_posun: >
         {% if t_out | float < 5 %}
           {{ (0 - t_out | float) / 10 }}
         {% else %}0{% endif %}
 
-      # 5. VNITŘNÍ KOREKCE
+      # 5. INDOOR CORRECTION (non-linear response)
       gain_val: "{{ states(gain_ent) | float(1.2) }}"
       bias_val: "{{ states(bias_ent) | float(0) }}"
       temp_diff: "{{ t_in | float - (target_temp_var | float + bias_val | float) }}"
@@ -303,15 +311,15 @@ action:
         {% elif d <= -0.3 %}1.0
         {% else %}0.0{% endif %}
 
-      # 6. BONUS 6H
+      # 6. CHEAP 6H BLOCK BONUS
       bonus_6h: >
         {% if cheap_ent is not none and is_state(cheap_ent, 'on') %}1.0
         {% else %}0{% endif %}
 
-      # 7. VLIV SPOT
+      # 7. SPOT PRICE INFLUENCE (v4.4: reduced 3×)
       vliv_spot_raw: "{{ (-0.3 * cena_ted | float) + 1.5 }}"
 
-      # 8. COP BONUS – prahy pro NIBE ground-source (rozsah 4.0–7.5)
+      # 8. COP BONUS – thresholds for NIBE ground-source (range 4.0–7.5)
       cop_value: >
         {% if cop_ent is none %}
           6.0
@@ -335,7 +343,7 @@ action:
         {% endif %}
 
   - variables:
-      # HLAVNÍ VÝPOČET (8 SLOŽEK)
+      # MAIN CALCULATION (8 COMPONENTS)
       raw_calc: >
         {{ vliv_spot_raw | float + ekvi_posun | float + bonus_6h | float +
            (corr_indoor | float * gain_val | float) + preheat_bonus | float +
@@ -377,108 +385,108 @@ action:
         {{ last_write_ent is none or
            minutes_since_write | float >= min_write_interval_min | float }}
 
-  # MQTT DEBUG
+  # MQTT DEBUG PUBLISH
   - service: mqtt.publish
     data:
       topic: !input mqtt_debug_topic
       payload: >
-        {% set vliv_spotu = vliv_spot_raw | float %}
-        {% set vliv_indoor = corr_indoor | float * gain_val | float %}
-        {% set vliv_ekvi = ekvi_posun | float %}
-        {% set vliv_cop = cop_bonus | float %}
+        {% set spot_influence = vliv_spot_raw | float %}
+        {% set indoor_influence = corr_indoor | float * gain_val | float %}
+        {% set equi_influence = ekvi_posun | float %}
+        {% set cop_influence = cop_bonus | float %}
         {{
           {
             "metadata": {
-              "verze": "4.3 + COP",
+              "version": "4.4",
               "timestamp": now().isoformat(),
-              "pocet_slozek": 8
+              "components_count": 8
             },
             "offset": {
-              "finalni": offset_final | int,
-              "aktualni": off_curr | int,
-              "zmena": offset_final | int - off_curr | int,
-              "surovy_vypocet": raw_calc | round(3)
+              "final": offset_final | int,
+              "current": off_curr | int,
+              "change": offset_final | int - off_curr | int,
+              "raw_calculation": raw_calc | round(3)
             },
-            "vstupni_senzory": {
-              "spot_price": {"hodnota": cena_ted | round(3), "jednotka": "Kč/kWh"},
-              "venkovni_teplota": {"hodnota": t_out | round(2), "stav_pocasi": stav_pocasi},
-              "vnitrni_teplota": {"hodnota": t_in | round(2), "rozdil": temp_diff | round(3)},
-              "stupnominuty": {"hodnota": dm_val | round(0), "alarm": dm_val | float < -800},
+            "input_sensors": {
+              "spot_price": {"value": cena_ted | round(3), "unit": "currency/kWh"},
+              "outdoor_temperature": {"value": t_out | round(2), "weather_state": stav_pocasi},
+              "indoor_temperature": {"value": t_in | round(2), "diff_from_target": temp_diff | round(3)},
+              "degree_minutes": {"value": dm_val | round(0), "alarm": dm_val | float < -800},
               "cop": {
-                "entita": cop_ent,
-                "hodnota": cop_value | float | round(2),
-                "nakonfigurovano": cop_ent is not none,
-                "kvalita": "Výborný" if cop_value | float > 7.0 else ("Velmi dobrý" if cop_value | float > 6.5 else ("Dobrý" if cop_value | float > 6.0 else ("Průměrný" if cop_value | float > 5.0 else ("Slabý" if cop_value | float > 4.0 else "Velmi slabý (mráz)"))))
+                "entity": cop_ent,
+                "value": cop_value | float | round(2),
+                "configured": cop_ent is not none,
+                "quality": "Excellent" if cop_value | float > 7.0 else ("Very good" if cop_value | float > 6.5 else ("Good" if cop_value | float > 6.0 else ("Average" if cop_value | float > 5.0 else ("Poor" if cop_value | float > 4.0 else "Very poor (frost)"))))
               }
             },
-            "vypocet_offsetu": {
-              "celkovy_soucet": raw_calc | round(3),
-              "rozpad_slozek": {
-                "1_vliv_spot_ceny": {
-                  "hodnota": vliv_spotu | round(3),
-                  "vzorec": "(-0.8 × cena) + 4.0",
-                  "vypocet": "(-0.8 × " ~ (cena_ted | round(2)) ~ ") + 4.0",
-                  "procento_z_celku": ((vliv_spotu / raw_calc * 100) if raw_calc != 0 else 0) | round(1)
+            "offset_calculation": {
+              "total_sum": raw_calc | round(3),
+              "component_breakdown": {
+                "1_spot_price_influence": {
+                  "value": spot_influence | round(3),
+                  "formula": "(-0.3 × price) + 1.5",
+                  "calculation": "(-0.3 × " ~ (cena_ted | round(2)) ~ ") + 1.5",
+                  "percent_of_total": ((spot_influence / raw_calc * 100) if raw_calc != 0 else 0) | round(1)
                 },
-                "2_ekvitermni_posun": {
-                  "hodnota": vliv_ekvi | round(3),
-                  "vzorec": "(0 - t_out) / 10 pokud t_out < 5°C",
-                  "aktivni": t_out < 5,
-                  "procento_z_celku": ((vliv_ekvi / raw_calc * 100) if raw_calc != 0 else 0) | round(1)
+                "2_equithermal_shift": {
+                  "value": equi_influence | round(3),
+                  "formula": "(0 - t_out) / 10 if t_out < 5°C",
+                  "active": t_out < 5,
+                  "percent_of_total": ((equi_influence / raw_calc * 100) if raw_calc != 0 else 0) | round(1)
                 },
-                "3_vnitrni_korekce": {
-                  "hodnota": vliv_indoor | round(3),
-                  "zakladni_korekce": corr_indoor | float | round(3),
+                "3_indoor_correction": {
+                  "value": indoor_influence | round(3),
+                  "base_correction": corr_indoor | float | round(3),
                   "gain": gain_val | round(2),
-                  "procento_z_celku": ((vliv_indoor / raw_calc * 100) if raw_calc != 0 else 0) | round(1)
+                  "percent_of_total": ((indoor_influence / raw_calc * 100) if raw_calc != 0 else 0) | round(1)
                 },
-                "4_bonus_6h_blok": {
-                  "hodnota": bonus_6h | float | round(3),
-                  "aktivni": bonus_6h | float != 0,
-                  "nakonfigurovano": cheap_ent is not none,
-                  "entita": cheap_ent,
-                  "stav": is_state(cheap_ent, 'on') if cheap_ent is not none else false,
-                  "procento_z_celku": ((bonus_6h | float / raw_calc * 100) if raw_calc != 0 else 0) | round(1)
+                "4_bonus_6h_block": {
+                  "value": bonus_6h | float | round(3),
+                  "active": bonus_6h | float != 0,
+                  "configured": cheap_ent is not none,
+                  "entity": cheap_ent,
+                  "state": is_state(cheap_ent, 'on') if cheap_ent is not none else false,
+                  "percent_of_total": ((bonus_6h | float / raw_calc * 100) if raw_calc != 0 else 0) | round(1)
                 },
                 "5_preheat_bonus": {
-                  "hodnota": preheat_bonus | float | round(3),
-                  "cena_za_4h": cena_preheat | round(3),
-                  "cena_aktualni": cena_ted | round(3),
-                  "pomer": ((cena_preheat / cena_ted) if cena_ted > 0 else 0) | round(2),
-                  "aktivni": preheat_bonus | float != 0,
-                  "procento_z_celku": ((preheat_bonus | float / raw_calc * 100) if raw_calc != 0 else 0) | round(1)
+                  "value": preheat_bonus | float | round(3),
+                  "price_in_Xh": cena_preheat | round(3),
+                  "current_price": cena_ted | round(3),
+                  "ratio": ((cena_preheat / cena_ted) if cena_ted > 0 else 0) | round(2),
+                  "active": preheat_bonus | float != 0,
+                  "percent_of_total": ((preheat_bonus | float / raw_calc * 100) if raw_calc != 0 else 0) | round(1)
                 },
                 "6_solar_malus": {
-                  "hodnota": solar_malus | float | round(3),
-                  "stav_pocasi": stav_pocasi,
-                  "aktivni": solar_malus | float != 0,
-                  "procento_z_celku": ((solar_malus | float / raw_calc * 100) if raw_calc != 0 else 0) | round(1)
+                  "value": solar_malus | float | round(3),
+                  "weather_state": stav_pocasi,
+                  "active": solar_malus | float != 0,
+                  "percent_of_total": ((solar_malus | float / raw_calc * 100) if raw_calc != 0 else 0) | round(1)
                 },
                 "7_forecast_bonus": {
-                  "hodnota": forecast_bonus | float | round(3),
+                  "value": forecast_bonus | float | round(3),
                   "trend": trend_val | round(3),
-                  "procento_z_celku": ((forecast_bonus | float / raw_calc * 100) if raw_calc != 0 else 0) | round(1)
+                  "percent_of_total": ((forecast_bonus | float / raw_calc * 100) if raw_calc != 0 else 0) | round(1)
                 },
                 "8_cop_bonus": {
-                  "hodnota": vliv_cop | round(3),
+                  "value": cop_influence | round(3),
                   "cop": cop_value | float | round(2),
-                  "nakonfigurovano": cop_ent is not none,
-                  "vzorec": "COP >7.0→-0.8, >6.5→-0.5, >6.0→-0.3, <4.0→+0.8, <5.0→+0.5",
-                  "logika": "Vysoký COP = TČ efektivní → snížit offset. Nízký COP = mráz/neefektivní → zvýšit offset",
-                  "aktivni": vliv_cop != 0,
-                  "procento_z_celku": ((vliv_cop / raw_calc * 100) if raw_calc != 0 else 0) | round(1)
+                  "configured": cop_ent is not none,
+                  "formula": "COP >7.0→-0.8, >6.5→-0.5, >6.0→-0.3, <4.0→+0.8, <5.0→+0.5",
+                  "logic": "High COP = efficient HP → reduce offset. Low COP = frost/inefficient → increase offset",
+                  "active": cop_influence != 0,
+                  "percent_of_total": ((cop_influence / raw_calc * 100) if raw_calc != 0 else 0) | round(1)
                 }
               },
-              "kontrolni_soucet": (vliv_spotu + vliv_ekvi + vliv_indoor + (bonus_6h | float) + (preheat_bonus | float) + (solar_malus | float) + (forecast_bonus | float) + vliv_cop) | round(3)
+              "control_sum": (spot_influence + equi_influence + indoor_influence + (bonus_6h | float) + (preheat_bonus | float) + (solar_malus | float) + (forecast_bonus | float) + cop_influence) | round(3)
             },
-            "ochrana_a_limity": {
-              "dm_guard": {"stupnominuty": dm_val | round(0), "max_step": max_step | int},
-              "eeprom_ochrana": {"minut_od_zapisu": minutes_since_write | float, "write_allowed": allow_write_by_time or comfort_override}
+            "protection_and_limits": {
+              "dm_guard": {"degree_minutes": dm_val | round(0), "max_step": max_step | int},
+              "eeprom_protection": {"minutes_since_write": minutes_since_write | float, "write_allowed": allow_write_by_time or comfort_override}
             },
-            "rozhodnuti": {
-              "kontroly": {
-                "senzory_dostupne": states(spot_ent) != 'unavailable' and states(weather_ent) != 'unavailable',
-                "dostatecna_zmena": (off_curr | int - offset_final | int) | abs >= effective_min_change | int
+            "decision": {
+              "checks": {
+                "sensors_available": states(spot_ent) != 'unavailable' and states(weather_ent) != 'unavailable',
+                "sufficient_change": (off_curr | int - offset_final | int) | abs >= effective_min_change | int
               }
             }
           } | tojson
@@ -487,10 +495,10 @@ action:
 
   - service: logbook.log
     data:
-      name: "NIBE v4.3"
+      name: "NIBE v4.4"
       message: >
         Offset={{ offset_final | int }} ({{ offset_final | int - off_curr | int }}),
-        raw={{ raw_calc | round(2) }}, COP={{ cop_value | round(2) }}, 8 složek
+        raw={{ raw_calc | round(2) }}, COP={{ cop_value | round(2) }}, 8 components
       entity_id: "{{ spot_ent }}"
 
   - condition: template

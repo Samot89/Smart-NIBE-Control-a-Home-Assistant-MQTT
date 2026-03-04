@@ -1,395 +1,353 @@
-## 🧩 Použité helpery (Home Assistant)
+## 🧩 Helpers used (Home Assistant)
 
-Tato automatizace využívá několik **helperů Home Assistantu**
-(`input_number`, případně senzory), které umožňují
-**dlouhodobé učení domu, jemné ladění a bezpečný provoz**.
+This automation uses several **Home Assistant helpers**
+(`input_number` and sensors) that enable
+**long-term learning, fine-tuning, and safe operation**.
 
-Helpery jsou záměrně oddělené od samotné logiky automatizace,
-aby byla regulace:
-- přehledná
-- stabilní
-- snadno laditelná
-- a neagresivní
+The helpers are intentionally separated from the automation logic
+so that control is:
+- transparent
+- stable
+- easy to tune
+- and non-aggressive
 
 ---
 
-### 🔹 Indoor bias – dlouhodobý posun domu  
+### 🔹 Indoor bias – long-term house offset
 `input_number.indoor_bias`
 
-**Účel:**  
-Kompenzuje **dlouhodobou systematickou odchylku** chování domu.
+**Purpose:**
+Compensates for the **long-term systematic deviation** in house behavior.
 
-**Proč existuje:**  
-Každý dům se chová jinak.  
-Některé domy jsou trvale o něco chladnější / teplejší,
-než by odpovídalo ekvitermní křivce.
+**Why it exists:**
+Every house behaves differently.
+Some houses are consistently slightly cooler / warmer
+than what the equithermal curve would suggest.
 
-Místo neustálého zvyšování nebo snižování křivky
-se dům **postupně „naučí“ sám sebe**.
+Instead of constantly raising or lowering the curve,
+the house **gradually "learns" itself**.
 
-**Vliv:**
-- kladná hodnota → dům má tendenci být chladnější → přidá se výkon
-- záporná hodnota → dům má tendenci být teplejší → výkon se ubere
+**Effect:**
+- Positive value → house tends to be cooler → heating output is added
+- Negative value → house tends to be warmer → output is reduced
+
 ---
-### 🔹 Stupňominuty (Degree Minutes)
 
-sensor.degree_minutes
+### 🔹 Degree-minutes
 
-Účel:
-Chrání tepelné čerpadlo před přetížením
-a spuštěním elektrické patrony.
+`sensor.degree_minutes`
 
-Proč existují:
-Stupňominuty jsou klíčová interní veličina NIBE,
-která vyjadřuje akumulovaný tepelný deficit.
+**Purpose:**
+Protects the heat pump from overload
+and from triggering the electric backup heater.
 
-Jejich sledováním lze:
+**Why it exists:**
+Degree-minutes are a key internal NIBE variable
+that expresses the accumulated heat deficit.
 
-zpomalit nárůst výkonu
+By monitoring them, you can:
+- Slow the rise in output
+- Prevent the value from dropping to −700
+- Protect COP and the compressor
 
-zabránit pádu k −700
+**Used in automation for:**
+- DM Guard
+- Limiting the rate of changes
 
-chránit COP i kompresor
-
-Použití v automatizaci:
-
-DM Guard
-
-omezení rychlosti změn
-
-
-Účel:
-Poskytuje aktuální cenu elektřiny.
-
-Požadavky:
-
-musí mít aktuální cenu
-
-ideálně i atribut today[] pro pohled dopředu
-
-Použití:
-
-optimalizace nákladů
-
-logika předtopení
-
-ekonomické rozhodování
 ---
-### 🔹 Nejlevnější blok (např. 6 hodin)
 
-sensor.cheapest_6h_block
+### 🔹 Spot price sensor
 
-Účel:
-Binární informace, že probíhá nejlevnější část dne.
+**Purpose:**
+Provides the current electricity price.
 
-Proč existuje:
-Umožňuje bezpečné, ale výraznější předtopení
-v předem známých levných hodinách.
+**Requirements:**
+- Must have a current price
+- Ideally also a `today[]` attribute for look-ahead
 
-Vliv:
+**Used for:**
+- Cost optimization
+- Pre-heating logic
+- Economic decisions
 
-zapnuto → přidá se bonus k offsetu
-
-vypnuto → bez bonusu
 ---
-###🔹 Aktuální offset topné křivky
 
-sensor.current_offset
+### 🔹 Cheapest block (e.g. 6 hours)
 
-Účel:
-Zobrazuje skutečný offset, který je právě nastavený v NIBE.
+`sensor.cheapest_6h_block`
 
-Proč existuje:
-Automatizace musí vždy vycházet z reality,
-jinak by docházelo ke kmitání a zbytečným zápisům.
+**Purpose:**
+Binary information that the cheapest part of the day is active.
 
-Použití:
+**Why it exists:**
+Enables safe but more significant pre-heating
+during known cheap hours.
 
-omezení rychlosti změn
+**Effect:**
+- Active → a bonus is added to the offset
+- Inactive → no bonus
 
-ochrana EEPROM
-
-stabilita regulace
 ---
-### 🔹 Volitelně: HDO / blokace sítě
 
-binary_sensor.hdo
+### 🔹 Current heating curve offset
 
-Účel:
-Zabrání regulaci během blokovaných tarifních období.
+`sensor.current_offset`
 
-Chování:
+**Purpose:**
+Shows the actual offset currently set in NIBE.
 
-pokud je zadáno → regulace běží jen při HDO = ON
+**Why it exists:**
+The automation must always work from reality,
+otherwise oscillation and unnecessary writes would occur.
 
-pokud není → regulace je vždy povolena
+**Used for:**
+- Limiting rate of changes
+- EEPROM protection
+- Regulation stability
 
-**Doporučené nastavení:**
+---
+
+### 🔹 Optional: HDO / grid blocking
+
+`binary_sensor.hdo`
+
+**Purpose:**
+Prevents control during blocked tariff periods.
+
+**Behavior:**
+- If set → control only runs when HDO = ON
+- If not set → control is always allowed
+
+---
+
+**Recommended configuration:**
+
 ```yaml
-
-configuration.yaml
+# configuration.yaml
 input_number:
   indoor_bias:
-    name: Bias vnitřní teploty
+    name: Indoor temperature bias
     min: -1.0
     max: 1.0
     step: 0.05
     unit_of_measurement: "°C"
 
-
-input_number:
   indoor_response_gain:
-    name: Zesílení reakce regulace
+    name: Control response gain
     min: 0.5
     max: 1.5
     step: 0.1
 
-
-input_number:
   weather_forecast_trend:
-    name: Trend počasí (nejbližší hodiny)
+    name: Weather trend (upcoming hours)
     min: -10
     max: 10
     step: 0.1
     unit_of_measurement: "°C"
 
-
-input_number:
   weather_forecast_avg_6h:
     name: Forecast avg 6h
     min: -30
     max: 20
     step: 0.1
     unit_of_measurement: "°C"
+```
 
-mqtt.yaml
+```yaml
+# mqtt.yaml
 mqtt:
- senzor:
-   # ===========================================================================
-  # HLAVNÍ SENZOR - Obsahuje VŠE v JSON atributech
-  # ===========================================================================  
+  sensor:
+    # ===========================================================================
+    # MAIN SENSOR - Contains EVERYTHING in JSON attributes
+    # ===========================================================================
+    - name: "NIBE Offset Debug"
+      unique_id: nibe_offset_debug
+      state_topic: "nibe/debug/offset_calc"
+      value_template: "{{ value_json.offset.final }}"
+      unit_of_measurement: "offset"
+      icon: mdi:thermometer-lines
+      json_attributes_topic: "nibe/debug/offset_calc"
+      json_attributes_template: "{{ value_json | tojson }}"
 
-  - name: "NIBE Offset Debug"
-    unique_id: nibe_offset_debug
-    state_topic: "nibe/debug/offset_calc"
-    value_template: "{{ value_json.offset.finalni }}"
-    unit_of_measurement: "offset"
-    icon: mdi:thermometer-lines
-    json_attributes_topic: "nibe/debug/offset_calc"
-    json_attributes_template: "{{ value_json | tojson }}"
-  
-  # ===========================================================================
-  # TOP 10 SENZORŮ
-  # ===========================================================================
-  
-  - name: NIBE Offset Finální
-    unique_id: nibe_offset_final
-    state_topic: "nibe/debug/offset_calc"
-    value_template: "{{ value_json.offset.finalni | default(0) }}"
-    icon: mdi:target
-  
-  - name: NIBE Offset Změna
-    unique_id: nibe_offset_change
-    state_topic: "nibe/debug/offset_calc"
-    value_template: "{{ value_json.offset.zmena | default(0) }}"
-    icon: mdi:delta
-  
-  - name: NIBE Vliv Spot Ceny
-    unique_id: nibe_component_spot
-    state_topic: "nibe/debug/offset_calc"
-    value_template: "{{ value_json.vypocet_offsetu.rozpad_slozek['1_vliv_spot_ceny'].hodnota | default(0) | round(2) }}"
-    icon: mdi:currency-eur
-  
-  - name: NIBE Vliv Vnitřní Korekce
-    unique_id: nibe_component_indoor
-    state_topic: "nibe/debug/offset_calc"
-    value_template: "{{ value_json.vypocet_offsetu.rozpad_slozek['3_vnitrni_korekce'].hodnota | default(0) | round(2) }}"
-    icon: mdi:home-thermometer-outline
-  
-  - name: NIBE Vliv Ekviterm
-    unique_id: nibe_component_ekvi
-    state_topic: "nibe/debug/offset_calc"
-    value_template: "{{ value_json.vypocet_offsetu.rozpad_slozek['2_ekvitermni_posun'].hodnota | default(0) | round(2) }}"
-    icon: mdi:chart-line
-  
-  - name: NIBE Spot Cena
-    unique_id: nibe_debug_spot_price
-    state_topic: "nibe/debug/offset_calc"
-    value_template: "{{ value_json.vstupni_senzory.spot_price.hodnota | default(0) | round(3) }}"
-    unit_of_measurement: "Kč/kWh"
-    icon: mdi:currency-eur
-  
-  - name: NIBE Venkovní Teplota
-    unique_id: nibe_outdoor_temp
-    state_topic: "nibe/debug/offset_calc"
-    value_template: "{{ value_json.vstupni_senzory.venkovni_teplota.hodnota | default(0) | round(1) }}"
-    unit_of_measurement: "°C"
-    icon: mdi:thermometer
-    device_class: temperature
-  
-  - name: NIBE Vnitřní Teplota
-    unique_id: nibe_indoor_temp
-    state_topic: "nibe/debug/offset_calc"
-    value_template: "{{ value_json.vstupni_senzory.vnitrni_teplota.hodnota | default(0) | round(1) }}"
-    unit_of_measurement: "°C"
-    icon: mdi:home-thermometer
-    device_class: temperature
-  
-  - name: NIBE Stupňominuty
-    unique_id: nibe_degree_minutes
-    state_topic: "nibe/debug/offset_calc"
-    value_template: "{{ value_json.vstupni_senzory.stupnominuty.hodnota | default(0) | round(0) }}"
-    unit_of_measurement: "°C·min"
-    icon: mdi:timer-sand
-  
-  - name: NIBE Minut Od Zápisu
-    unique_id: nibe_eeprom_minutes
-    state_topic: "nibe/debug/offset_calc"
-    value_template: "{{ value_json.ochrana_a_limity.eeprom_ochrana.minut_od_zapisu | default(0) | round(1) }}"
-    unit_of_measurement: "min"
-    icon: mdi:timer
+    - name: NIBE Final Offset
+      unique_id: nibe_offset_final
+      state_topic: "nibe/debug/offset_calc"
+      value_template: "{{ value_json.offset.final | default(0) }}"
+      icon: mdi:target
 
-  - name: "NIBE Vliv Spot Ceny"
-    unique_id: nibe_component_spot
-    state_topic: "nibe/debug/offset_calc"
-    value_template: "{{ value_json.vypocet_offsetu.rozpad_slozek['1_vliv_spot_ceny'].hodnota | default(0) | round(2) }}"
-    unit_of_measurement: ""
-    icon: mdi:currency-eur
-    
-  - name: "NIBE Vliv Ekviterm"
-    unique_id: nibe_component_ekvi
-    state_topic: "nibe/debug/offset_calc"
-    value_template: "{{ value_json.vypocet_offsetu.rozpad_slozek['2_ekvitermni_posun'].hodnota | default(0) | round(2) }}"
-    unit_of_measurement: ""
-    icon: mdi:chart-line
-    
-  - name: "NIBE Vliv Vnitřní Korekce"
-    unique_id: nibe_component_indoor
-    state_topic: "nibe/debug/offset_calc"
-    value_template: "{{ value_json.vypocet_offsetu.rozpad_slozek['3_vnitrni_korekce'].hodnota | default(0) | round(2) }}"
-    unit_of_measurement: ""
-    icon: mdi:home-thermometer-outline
-    
-  - name: "NIBE Bonus 6h Blok"
-    unique_id: nibe_bonus_6h
-    state_topic: "nibe/debug/offset_calc"
-    value_template: "{{ value_json.vypocet_offsetu.rozpad_slozek['4_bonus_6h_blok'].hodnota | default(0) | round(2) }}"
-    unit_of_measurement: ""
-    icon: mdi:clock-time-six
-    
-  - name: "NIBE Preheat Bonus"
-    unique_id: nibe_preheat_bonus
-    state_topic: "nibe/debug/offset_calc"
-    value_template: "{{ value_json.vypocet_offsetu.rozpad_slozek['5_preheat_bonus'].hodnota | default(0) | round(2) }}"
-    unit_of_measurement: ""
-    icon: mdi:fire-alert
-    
-  - name: "NIBE Solar Malus"
-    unique_id: nibe_solar_malus
-    state_topic: "nibe/debug/offset_calc"
-    value_template: "{{ value_json.vypocet_offsetu.rozpad_slozek['6_solar_malus'].hodnota | default(0) | round(2) }}"
-    unit_of_measurement: ""
-    icon: mdi:white-balance-sunny
-    
-  - name: "NIBE Forecast Bonus"
-    unique_id: nibe_forecast_bonus
-    state_topic: "nibe/debug/offset_calc"
-    value_template: "{{ value_json.vypocet_offsetu.rozpad_slozek['7_forecast_bonus'].hodnota | default(0) | round(2) }}"
-    unit_of_measurement: ""
-    icon: mdi:crystal-ball
+    - name: NIBE Offset Change
+      unique_id: nibe_offset_change
+      state_topic: "nibe/debug/offset_calc"
+      value_template: "{{ value_json.offset.change | default(0) }}"
+      icon: mdi:delta
 
-  # ── COP ─────────────────────────────────────────────
-  - name: "NIBE Debug COP"
-    unique_id: nibe_debug_cop_hodnota
-    state_topic: "nibe/debug/offset_calc"
-    value_template: "{{ value_json.vstupni_senzory.cop.hodnota }}"
-    unit_of_measurement: ""
-    icon: mdi:lightning-bolt-circle
+    - name: NIBE Spot Price Influence
+      unique_id: nibe_component_spot
+      state_topic: "nibe/debug/offset_calc"
+      value_template: "{{ value_json.offset_calculation.component_breakdown['1_spot_price_influence'].value | default(0) | round(2) }}"
+      unit_of_measurement: ""
+      icon: mdi:currency-eur
 
-  - name: "NIBE Debug COP Kvalita"
-    unique_id: nibe_debug_cop_kvalita
-    state_topic: "nibe/debug/offset_calc"
-    value_template: "{{ value_json.vstupni_senzory.cop.kvalita }}"
-    icon: mdi:star-circle
+    - name: NIBE Equithermal Influence
+      unique_id: nibe_component_ekvi
+      state_topic: "nibe/debug/offset_calc"
+      value_template: "{{ value_json.offset_calculation.component_breakdown['2_equithermal_shift'].value | default(0) | round(2) }}"
+      unit_of_measurement: ""
+      icon: mdi:chart-line
 
-  - name: "NIBE Debug COP Bonus"
-    unique_id: nibe_debug_cop_bonus
-    state_topic: "nibe/debug/offset_calc"
-    value_template: "{{ value_json.vypocet_offsetu.rozpad_slozek['8_cop_bonus'].hodnota }}"
-    unit_of_measurement: ""
-    icon: mdi:plus-minus
+    - name: NIBE Indoor Correction Influence
+      unique_id: nibe_component_indoor
+      state_topic: "nibe/debug/offset_calc"
+      value_template: "{{ value_json.offset_calculation.component_breakdown['3_indoor_correction'].value | default(0) | round(2) }}"
+      unit_of_measurement: ""
+      icon: mdi:home-thermometer-outline
 
-number:
-  - name: Teplotní křivka Offset
-    unique_id: Heat Offset S1
-    json_attributes_topic: "{{ value_json.state }}"
-    min: -6
-    max: 6
-    step: 1
-    state_topic: "nibe/modbus/47011"
-    command_topic: "nibe/modbus/47011/set"
+    - name: NIBE Spot Price
+      unique_id: nibe_debug_spot_price
+      state_topic: "nibe/debug/offset_calc"
+      value_template: "{{ value_json.input_sensors.spot_price.value | default(0) | round(3) }}"
+      unit_of_measurement: "currency/kWh"
+      icon: mdi:currency-eur
 
+    - name: NIBE Outdoor Temperature
+      unique_id: nibe_outdoor_temp
+      state_topic: "nibe/debug/offset_calc"
+      value_template: "{{ value_json.input_sensors.outdoor_temperature.value | default(0) | round(1) }}"
+      unit_of_measurement: "°C"
+      icon: mdi:thermometer
+      device_class: temperature
 
-  - name: Teplotní křivka Offset
-    unique_id: a220223829
-    state_topic: "nibe/modbus/47011"
+    - name: NIBE Indoor Temperature
+      unique_id: nibe_indoor_temp
+      state_topic: "nibe/debug/offset_calc"
+      value_template: "{{ value_json.input_sensors.indoor_temperature.value | default(0) | round(1) }}"
+      unit_of_measurement: "°C"
+      icon: mdi:home-thermometer
+      device_class: temperature
 
-binary_sensor:
-  - name: NIBE Zápis Povolen
-    unique_id: nibe_write_allowed
-    state_topic: "nibe/debug/offset_calc"
-    value_template: "{{ value_json.ochrana_a_limity.eeprom_ochrana.write_allowed | default(false) }}"
-    payload_on: true
-    payload_off: false
-    icon: mdi:check-circle
-  
-  - name: NIBE DM Alarm
-    unique_id: nibe_dm_alarm
-    state_topic: "nibe/debug/offset_calc"
-    value_template: "{{ value_json.vstupni_senzory.stupnominuty.alarm | default(false) }}"
-    payload_on: true
-    payload_off: false
-    icon: mdi:alert
-    device_class: problem
-  
-  - name: NIBE Senzory OK
-    unique_id: nibe_check_sensors
-    state_topic: "nibe/debug/offset_calc"
-    value_template: "{{ value_json.rozhodnuti.kontroly.senzory_dostupne | default(false) }}"
-    payload_on: true
-    payload_off: false
-    icon: mdi:check
-    device_class: connectivity
+    - name: NIBE Degree Minutes
+      unique_id: nibe_degree_minutes
+      state_topic: "nibe/debug/offset_calc"
+      value_template: "{{ value_json.input_sensors.degree_minutes.value | default(0) | round(0) }}"
+      unit_of_measurement: "°C·min"
+      icon: mdi:timer-sand
 
-  - name: "NIBE 6h Blok Nakonfigurován"
-    unique_id: nibe_6h_configured
-    state_topic: "nibe/debug/offset_calc"
-    value_template: "{{ value_json.vypocet_offsetu.rozpad_slozek['4_bonus_6h_blok'].nakonfigurovano | default(false) }}"
-    payload_on: true
-    payload_off: false
-    icon: mdi:cog
-    
-  - name: "NIBE Preheat Aktivní"
-    unique_id: nibe_preheat_active
-    state_topic: "nibe/debug/offset_calc"
-    value_template: "{{ value_json.vypocet_offsetu.rozpad_slozek['5_preheat_bonus'].aktivni | default(false) }}"
-    payload_on: true
-    payload_off: false
-    icon: mdi:fire
-    
-  - name: "NIBE Solar Aktivní"
-    unique_id: nibe_solar_active
-    state_topic: "nibe/debug/offset_calc"
-    value_template: "{{ value_json.vypocet_offsetu.rozpad_slozek['6_solar_malus'].aktivni | default(false) }}"
-    payload_on: true
-    payload_off: false
-    icon: mdi:weather-sunny
+    - name: NIBE Minutes Since Write
+      unique_id: nibe_eeprom_minutes
+      state_topic: "nibe/debug/offset_calc"
+      value_template: "{{ value_json.protection_and_limits.eeprom_protection.minutes_since_write | default(0) | round(1) }}"
+      unit_of_measurement: "min"
+      icon: mdi:timer
 
+    - name: "NIBE 6h Block Bonus"
+      unique_id: nibe_bonus_6h
+      state_topic: "nibe/debug/offset_calc"
+      value_template: "{{ value_json.offset_calculation.component_breakdown['4_bonus_6h_block'].value | default(0) | round(2) }}"
+      unit_of_measurement: ""
+      icon: mdi:clock-time-six
 
+    - name: "NIBE Preheat Bonus"
+      unique_id: nibe_preheat_bonus
+      state_topic: "nibe/debug/offset_calc"
+      value_template: "{{ value_json.offset_calculation.component_breakdown['5_preheat_bonus'].value | default(0) | round(2) }}"
+      unit_of_measurement: ""
+      icon: mdi:fire-alert
 
+    - name: "NIBE Solar Malus"
+      unique_id: nibe_solar_malus
+      state_topic: "nibe/debug/offset_calc"
+      value_template: "{{ value_json.offset_calculation.component_breakdown['6_solar_malus'].value | default(0) | round(2) }}"
+      unit_of_measurement: ""
+      icon: mdi:white-balance-sunny
 
+    - name: "NIBE Forecast Bonus"
+      unique_id: nibe_forecast_bonus
+      state_topic: "nibe/debug/offset_calc"
+      value_template: "{{ value_json.offset_calculation.component_breakdown['7_forecast_bonus'].value | default(0) | round(2) }}"
+      unit_of_measurement: ""
+      icon: mdi:crystal-ball
 
+    - name: "NIBE Debug COP"
+      unique_id: nibe_debug_cop_value
+      state_topic: "nibe/debug/offset_calc"
+      value_template: "{{ value_json.input_sensors.cop.value }}"
+      unit_of_measurement: ""
+      icon: mdi:lightning-bolt-circle
 
+    - name: "NIBE Debug COP Quality"
+      unique_id: nibe_debug_cop_quality
+      state_topic: "nibe/debug/offset_calc"
+      value_template: "{{ value_json.input_sensors.cop.quality }}"
+      icon: mdi:star-circle
 
+    - name: "NIBE Debug COP Bonus"
+      unique_id: nibe_debug_cop_bonus
+      state_topic: "nibe/debug/offset_calc"
+      value_template: "{{ value_json.offset_calculation.component_breakdown['8_cop_bonus'].value }}"
+      unit_of_measurement: ""
+      icon: mdi:plus-minus
 
+  number:
+    - name: Heat Curve Offset
+      unique_id: heat_offset_s1
+      min: -6
+      max: 6
+      step: 1
+      state_topic: "nibe/modbus/47011"
+      command_topic: "nibe/modbus/47011/set"
 
+    - name: Heat Curve Offset
+      unique_id: a220223829
+      state_topic: "nibe/modbus/47011"
+
+  binary_sensor:
+    - name: NIBE Write Allowed
+      unique_id: nibe_write_allowed
+      state_topic: "nibe/debug/offset_calc"
+      value_template: "{{ value_json.protection_and_limits.eeprom_protection.write_allowed | default(false) }}"
+      payload_on: true
+      payload_off: false
+      icon: mdi:check-circle
+
+    - name: NIBE DM Alarm
+      unique_id: nibe_dm_alarm
+      state_topic: "nibe/debug/offset_calc"
+      value_template: "{{ value_json.input_sensors.degree_minutes.alarm | default(false) }}"
+      payload_on: true
+      payload_off: false
+      icon: mdi:alert
+      device_class: problem
+
+    - name: NIBE Sensors OK
+      unique_id: nibe_check_sensors
+      state_topic: "nibe/debug/offset_calc"
+      value_template: "{{ value_json.decision.checks.sensors_available | default(false) }}"
+      payload_on: true
+      payload_off: false
+      icon: mdi:check
+      device_class: connectivity
+
+    - name: "NIBE 6h Block Configured"
+      unique_id: nibe_6h_configured
+      state_topic: "nibe/debug/offset_calc"
+      value_template: "{{ value_json.offset_calculation.component_breakdown['4_bonus_6h_block'].configured | default(false) }}"
+      payload_on: true
+      payload_off: false
+      icon: mdi:cog
+
+    - name: "NIBE Preheat Active"
+      unique_id: nibe_preheat_active
+      state_topic: "nibe/debug/offset_calc"
+      value_template: "{{ value_json.offset_calculation.component_breakdown['5_preheat_bonus'].active | default(false) }}"
+      payload_on: true
+      payload_off: false
+      icon: mdi:fire
+
+    - name: "NIBE Solar Active"
+      unique_id: nibe_solar_active
+      state_topic: "nibe/debug/offset_calc"
+      value_template: "{{ value_json.offset_calculation.component_breakdown['6_solar_malus'].active | default(false) }}"
+      payload_on: true
+      payload_off: false
+      icon: mdi:weather-sunny
+```

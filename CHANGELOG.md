@@ -1,15 +1,17 @@
 # Changelog
 
-## [v4.4] – 2026-03-02
-
-### Změny
-- **Spot ceny: vliv snížen 3×** – koeficient -0.8 → -0.3, offset +4.0 → +1.5
-- Vnitřní teplota nyní dominuje regulaci (doporučeno: indoor_bias = 0.0)
-- Při ceně 10 Kč/kWh offset -1.5 místo -4.0 (dřívě příliš agresivní)
-
 All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
+
+---
+
+## [v4.4] – 2026-03-02
+
+### Changed
+- **Spot price influence reduced 3×** – coefficient -0.8 → -0.3, offset +4.0 → +1.5
+- Indoor temperature now dominates control (recommended: indoor_bias = 0.0)
+- At a price of 10 units/kWh, offset is -1.5 instead of -4.0 (previously too aggressive)
 
 ---
 
@@ -18,12 +20,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ### Added
 - `spot_slope` input: configurable spot price coefficient (default: -0.8)
 - `spot_intercept` input: configurable spot price base value (default: 4.0)
-- `preheat_price_threshold` input: max spot price to allow preheating (default: 2.5) – no longer hardcoded in CZK
+- `preheat_price_threshold` input: max spot price to allow preheating (default: 2.5) – no longer hardcoded
 - `preheat_ratio` input: future/current price ratio that triggers preheating (default: 1.3)
 - `preheat_look_ahead_hours` input: how many hours ahead to check price (default: 4)
 - `degree_minutes_guard` input: configurable alarm threshold for degree-minutes (default: -800)
 - `source_url` in blueprint metadata for HACS compatibility
-- MQTT debug payload now includes active configuration values (`konfigurace` section)
+- MQTT debug payload now includes active configuration values (`configuration` section)
 
 ### Changed
 - Renamed blueprint file from `Smart_NIBE_Ultra_Adaptive_FINAL_v2_9_2.yaml` to `smart_nibe_control.yaml`
@@ -32,10 +34,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - Degree-minutes guard threshold now uses configurable value
 - MQTT debug: spot price formula string dynamically reflects configured coefficients
 - Version string updated from `4.3 + COP` to `4.4`
-- `preheat_5_cena_za_4h` renamed to `preheat_5_cena_za_Xh` in debug payload to reflect variable look-ahead
+- `preheat_5_price_in_4h` renamed to `preheat_5_price_in_Xh` in debug payload to reflect variable look-ahead
 
 ### Fixed
-- `spot_price` field label in MQTT debug changed from hardcoded `Kč/kWh` to `měnová jednotka/kWh` for multi-currency support
+- `spot_price` field label in MQTT debug changed from hardcoded currency unit to `currency_unit/kWh` for multi-currency support
 
 ---
 

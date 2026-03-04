@@ -1,88 +1,88 @@
-# 📊 Smart NIBE Dashboard – Přehled Automatizace
+# 📊 Smart NIBE Dashboard – Automation Overview
 
-## 🎯 Základní Info
-- **Verze:** Ultra Adaptive FINAL 
-- **Spouštěč:** Každé 2 minuty po celé hodině (time_pattern)
-- **Režim:** Single (jeden běh najednou)
-
----
-
-## 📈 Vstupní Senzory
-
-### 🔌 Hlavní vstupy
-| Typ | Popis | Doména |
-|-----|-------|--------|
-| **Spot Price** | Aktuální cena elektřiny | sensor |
-| **Cheap Block** | Nejlevnější 6h blok | sensor |
-| **Degree Minutes** | Stupňominuty | sensor |
-| **Outdoor Weather** | Venkovní počasí | weather |
-| **Indoor Temp** | Vnitřní teplota | sensor |
-| **Current Offset** | Aktuální NIBE offset | sensor |
-| **HDO** | HDO senzor (volitelné) | binary_sensor |
-
-### 🎛️ Pomocné vstupy
-| Vstup | Popis | Rozsah |
-|-------|-------|--------|
-| **Forecast Trend** | Trend předpovědi počasí | input_number |
-| **Indoor Bias** | Bias vnitřní teploty | input_number |
-| **Response Gain** | Zesílení odezvy | input_number |
-| **Target Temp** | Cílová teplota | 18-24°C (default: 21.5°C) |
-| **Max Offset** | Maximální offset | 1-10 (default: 6) |
-| **Min Offset** | Minimální offset | -8 až -1 (default: -3) |
-| **Min Change** | Minimální změna | 1-5 (default: 1) |
-| **Look Ahead Hours** | Hodiny předpovědi | 1-6 (default: 2) |
+## 🎯 Basic Info
+- **Version:** Ultra Adaptive FINAL
+- **Trigger:** Every 2 minutes past the hour (time_pattern)
+- **Mode:** Single (one run at a time)
 
 ---
 
-## 🧮 Výpočetní Logika
+## 📈 Input Sensors
 
-### 1️⃣ LOOK-AHEAD (Předtopení)
+### 🔌 Main inputs
+| Type | Description | Domain |
+|------|-------------|--------|
+| **Spot Price** | Current electricity price | sensor |
+| **Cheap Block** | Cheapest 6h block | sensor |
+| **Degree Minutes** | Degree-minutes | sensor |
+| **Outdoor Weather** | Outdoor weather | weather |
+| **Indoor Temp** | Indoor temperature | sensor |
+| **Current Offset** | Current NIBE offset | sensor |
+| **HDO** | HDO sensor (optional) | binary_sensor |
+
+### 🎛️ Auxiliary inputs
+| Input | Description | Range |
+|-------|-------------|-------|
+| **Forecast Trend** | Weather forecast trend | input_number |
+| **Indoor Bias** | Indoor temperature bias | input_number |
+| **Response Gain** | Response amplification | input_number |
+| **Target Temp** | Target temperature | 18-24°C (default: 21.5°C) |
+| **Max Offset** | Maximum offset | 1-10 (default: 6) |
+| **Min Offset** | Minimum offset | -8 to -1 (default: -3) |
+| **Min Change** | Minimum change | 1-5 (default: 1) |
+| **Look Ahead Hours** | Forecast hours | 1-6 (default: 2) |
+
+---
+
+## 🧮 Calculation Logic
+
+### 1️⃣ LOOK-AHEAD (Pre-heating)
 ```
-Pokud cena za 2h > (aktuální cena × 1.3) AND aktuální cena < 2.5 CZK
+If price in 2h > (current price × 1.3) AND current price < 2.5
   → Preheat Bonus: +1.5
-Jinak
+Else
   → 0
 ```
 
-### 2️⃣ POČASÍ & SOLÁRNÍ VLIVY
+### 2️⃣ WEATHER & SOLAR INFLUENCES
 
-#### ☀️ Solární malus (9:00-15:00)
-| Stav počasí | Úprava |
-|-------------|--------|
-| Slunečno | -1.0 |
-| Polojasno | -0.5 |
-| Oblačno+ | 0.0 |
+#### ☀️ Solar malus (9:00-15:00)
+| Weather state | Adjustment |
+|---------------|-----------|
+| Sunny | -1.0 |
+| Partly cloudy | -0.5 |
+| Cloudy+ | 0.0 |
 
-#### 🌧️ Dešťový bonus
-| Stav počasí | Bonus |
-|-------------|-------|
-| Silný déšť/krupobití | +1.0 |
-| Lehký déšť/sníh | +0.5 |
-| Sucho | 0.0 |
+#### 🌧️ Rain bonus
+| Weather state | Bonus |
+|---------------|-------|
+| Heavy rain/hail | +1.0 |
+| Light rain/snow | +0.5 |
+| Dry | 0.0 |
 
-#### 💧 Vlhkostní bonus
+#### 💧 Humidity bonus
 ```
-Pokud vlhkost > 80% AND venkovní teplota < 10°C
+If humidity > 80% AND outdoor temperature < 10°C
   → +0.5
 ```
 
 #### 📉 Forecast bonus
 ```
-Linearní úprava podle trendu: (trend × -0.4)
-Omezeno: -1 až +1
+Linear adjustment based on trend: (trend × -0.4)
+Clamped: -1 to +1
 ```
 
 ---
 
-## ⚙️ Výpočet Offsetu
+## ⚙️ Offset Calculation
 
-### Surový výpočet:
+### Raw calculation:
 ```
 raw_calc = (
-    (-0.8 × spot_cena) + 4.0
-    + ekviterm_posun
+    (-0.3 × spot_price) + 1.5
+    + equithermal_shift
     + bonus_6h
-    + (indoor_korekce × gain)
+    + (indoor_correction × gain)
     + preheat_bonus
     + solar_malus
     + rain_bonus
@@ -91,123 +91,123 @@ raw_calc = (
 )
 ```
 
-### Ekviterm posun:
+### Equithermal shift:
 ```
-Pokud venkovní teplota < 5°C:
-  ekviterm = (0 - t_venkovní) / 10
-Jinak:
-  ekviterm = 0
-```
-
-### Vnitřní korekce:
-```
-rozdíl = t_vnitřní - (t_cílová + bias)
-
-Pokud rozdíl >= +0.8°C  → -1.5
-Pokud rozdíl >= +0.3°C  → -0.7
-Pokud rozdíl <= -0.8°C  → +2.0
-Pokud rozdíl <= -0.3°C  → +1.0
-Jinak                   → 0
+If outdoor temperature < 5°C:
+  equithermal = (0 - t_outdoor) / 10
+Else:
+  equithermal = 0
 ```
 
-### Bonus 6h blok:
+### Indoor correction:
 ```
-Pokud je aktivní cheap_block (nejlevnější 6h):
+diff = t_indoor - (t_target + bias)
+
+If diff >= +0.8°C  → -1.5
+If diff >= +0.3°C  → -0.7
+If diff <= -0.8°C  → +2.0
+If diff <= -0.3°C  → +1.0
+Else               → 0
+```
+
+### 6h block bonus:
+```
+If cheap_block is active (cheapest 6h):
   → +1.0
 ```
 
 ---
 
-## 🛡️ Bezpečnostní Ochrana
+## 🛡️ Safety Protection
 
-### DM Guard (Ochrana stupňominut)
+### DM Guard (Degree-minute protection)
 ```
-Pokud degree_minutes < -800:
-  max_step = 1  (omez změnu na ±1)
-Jinak:
+If degree_minutes < -800:
+  max_step = 1  (limit change to ±1)
+Else:
   max_step = 2
 ```
 
-### Clamping (Omezení rozsahu)
+### Clamping (Range limiting)
 ```
-Pokud t_venkovní < -15°C AND raw_calc > 2:
+If t_outdoor < -15°C AND raw_calc > 2:
   → offset = 2
 
-Jinak:
-  - Omez na max_offset až min_offset
-  - Zaokrouhli na celé číslo
+Else:
+  - Clamp to max_offset and min_offset
+  - Round to integer
 ```
 
-### Finální aplikace:
+### Final application:
 ```
-rozdíl = vypočtený_offset - aktuální_offset
+diff = calculated_offset - current_offset
 
-Pokud rozdíl >= max_step:
-  → offset = aktuální + max_step
+If diff >= max_step:
+  → offset = current + max_step
 
-Pokud rozdíl <= -2:
-  → offset = aktuální - 1
+If diff <= -2:
+  → offset = current - 1
 
-Jinak:
-  → offset = vypočtený_offset (celé číslo)
+Else:
+  → offset = calculated_offset (integer)
 ```
 
 ---
 
-## ✅ Podmínky Spuštění
+## ✅ Run Conditions
 
-### Musí být splněno:
-1. ✓ HDO je buď "none" nebo "on"
-2. ✓ Všechny hlavní senzory jsou dostupné (ne "unavailable")
-3. ✓ Rozdíl offsetů >= min_change_limit
+### Must be satisfied:
+1. ✓ HDO is either "none" or "on"
+2. ✓ All main sensors are available (not "unavailable")
+3. ✓ Offset difference >= min_change_limit
 
 ---
 
-## 📤 Akce
+## 📤 Actions
 
 ### 1. MQTT Publish - Offset
-- **Topic:** `nibe/modbus/47011/set` (konfigurovatelné)
-- **Payload:** Finální offset (celé číslo)
+- **Topic:** `nibe/modbus/47011/set` (configurable)
+- **Payload:** Final offset (integer)
 
 ### 2. MQTT Publish - Debug Info
 - **Topic:** `nibe/debug/offset_calc`
 - **Retain:** true
-- **Obsah:**
-  - Celkový offset
-  - Surový výpočet
-  - Stupňominuty
-  - Složky výpočtu (všechny bonusy/malusy)
-  - Ceny (aktuální, za 2h, první 3h)
-  - Teploty (venkovní, vnitřní, cílová)
-  - Počasí (stav, vlhkost, trend)
+- **Contents:**
+  - Total offset
+  - Raw calculation
+  - Degree-minutes
+  - Calculation components (all bonuses/malusses)
+  - Prices (current, in 2h, first 3h)
+  - Temperatures (outdoor, indoor, target)
+  - Weather (state, humidity, trend)
 
 ---
 
-## 📊 Monitorování
+## 📊 Monitoring
 
-### Doporučené entity k sledování:
+### Recommended entities to track:
 
-#### Základní metriky:
-- [ ] `sensor.nibe_current_offset` - Aktuální offset
-- [ ] `sensor.spot_price` - Cena elektřiny
-- [ ] `sensor.degree_minutes` - Stupňominuty
-- [ ] `sensor.indoor_temperature` - Vnitřní teplota
-- [ ] `weather.outdoor` - Počasí
+#### Basic metrics:
+- [ ] `sensor.nibe_current_offset` - Current offset
+- [ ] `sensor.spot_price` - Electricity price
+- [ ] `sensor.degree_minutes` - Degree-minutes
+- [ ] `sensor.indoor_temperature` - Indoor temperature
+- [ ] `weather.outdoor` - Weather
 
-#### Debug informace:
-- [ ] `nibe/debug/offset_calc` - Kompletní debug výstup (JSON)
+#### Debug information:
+- [ ] `nibe/debug/offset_calc` - Complete debug output (JSON)
 
-#### Kontrolní hodnoty:
-- [ ] `binary_sensor.cheap_6h_block` - Levný blok
-- [ ] `input_number.forecast_trend` - Trend předpovědi
-- [ ] `input_number.indoor_bias` - Vnitřní bias
-- [ ] `input_number.response_gain` - Zesílení odezvy
+#### Control values:
+- [ ] `binary_sensor.cheap_6h_block` - Cheap block
+- [ ] `input_number.forecast_trend` - Forecast trend
+- [ ] `input_number.indoor_bias` - Indoor bias
+- [ ] `input_number.response_gain` - Response gain
 
 ---
 
-## 🎨 Příklad Dashboard Konfigurace
+## 🎨 Dashboard Configuration Example
 
-### Lovelace YAML (kopíruj do dashboardu):
+### Lovelace YAML (copy to dashboard):
 
 ```yaml
 type: vertical-stack
@@ -215,36 +215,36 @@ cards:
   - type: markdown
     content: |
       # 🏠 Smart NIBE Control
-      ### Adaptivní řízení tepelného čerpadla
-  
+      ### Adaptive heat pump control
+
   - type: horizontal-stack
     cards:
       - type: entity
         entity: sensor.nibe_current_offset
-        name: Aktuální Offset
+        name: Current Offset
         icon: mdi:thermometer-lines
       - type: entity
         entity: sensor.spot_price
-        name: Cena Elektřiny
+        name: Electricity Price
         icon: mdi:currency-eur
       - type: entity
         entity: sensor.degree_minutes
-        name: Stupňominuty
+        name: Degree-minutes
         icon: mdi:gauge
-  
+
   - type: entities
-    title: 🌡️ Teploty
+    title: 🌡️ Temperatures
     entities:
       - entity: sensor.indoor_temperature
-        name: Vnitřní
+        name: Indoor
       - entity: weather.outdoor
-        name: Venkovní
+        name: Outdoor
         attribute: temperature
       - entity: input_number.target_temp
-        name: Cílová
-  
+        name: Target
+
   - type: entities
-    title: ⚙️ Nastavení
+    title: ⚙️ Settings
     entities:
       - entity: input_number.indoor_bias
         name: Indoor Bias
@@ -252,23 +252,23 @@ cards:
         name: Response Gain
       - entity: input_number.forecast_trend
         name: Forecast Trend
-  
+
   - type: entities
-    title: 📊 Stav
+    title: 📊 Status
     entities:
       - entity: binary_sensor.cheap_6h_block
-        name: Levný 6h blok
+        name: Cheap 6h block
       - entity: binary_sensor.hdo
-        name: HDO signál
-  
+        name: HDO signal
+
   - type: history-graph
-    title: 📈 Historie Offsetu
+    title: 📈 Offset History
     hours_to_show: 24
     entities:
       - entity: sensor.nibe_current_offset
-  
+
   - type: history-graph
-    title: 💰 Cena Elektřiny
+    title: 💰 Electricity Price
     hours_to_show: 24
     entities:
       - entity: sensor.spot_price
@@ -276,60 +276,58 @@ cards:
 
 ---
 
-## 🔧 Údržba & Ladění
+## 🔧 Maintenance & Tuning
 
-### Tipy pro optimalizaci:
+### Optimization tips:
 
 1. **Response Gain** (1.0-2.0)
-   - Vyšší hodnota = rychlejší reakce na vnitřní teplotu
-   - Doporučeno: 1.2
+   - Higher value = faster response to indoor temperature
+   - Recommended: 1.2
 
-2. **Indoor Bias** (-2.0 až +2.0)
-   - Posun cílové teploty
-   - Použij pro dlouhodobou korekci
+2. **Indoor Bias** (-2.0 to +2.0)
+   - Shift of target temperature
+   - Use for long-term correction
 
 3. **Look Ahead Hours** (1-6)
-   - Delší horizont = větší předtopení při růstu cen
-   - Doporučeno: 2
+   - Longer horizon = more pre-heating when prices rise
+   - Recommended: 2
 
 4. **Max/Min Offset**
-   - Omez podle možností systému
+   - Limit according to system capabilities
    - Default: 4 / -3
 
-### Řešení problémů:
+### Troubleshooting:
 
-❌ **Offset se nemění**
-- Zkontroluj `min_change` - možná je příliš velké
-- Ověř dostupnost všech senzorů
-- Zkontroluj HDO signál
+❌ **Offset not changing**
+- Check `min_change` – may be set too high
+- Verify all sensors are available
+- Check HDO signal
 
-❌ **Příliš časté změny**
-- Zvyš `min_change` na 2
-- Snižuj `response_gain`
+❌ **Too frequent changes**
+- Increase `min_change` to 2
+- Reduce `response_gain`
 
-❌ **Nedostatečné předtopení**
-- Zvyš `look_ahead_hours`
-- Zkontroluj předpověď cen (today_prices atribut)
+❌ **Insufficient pre-heating**
+- Increase `look_ahead_hours`
+- Check price forecast (today_prices attribute)
 
 ---
 
 ## 📝 Changelog
 
-### 
-- Všechny výpočty zaokrouhleny na celá čísla
-- DM Guard pro ochranu při extrémních stupňominutách
-- Rozšířené debug info v MQTT
-- Look-ahead preheat mechanismus
+### Notes
+- All calculations rounded to integers
+- DM Guard for protection at extreme degree-minutes
+- Extended debug info in MQTT
+- Look-ahead preheat mechanism
 
 ---
 
-## 🔗 Reference
+## 🔗 References
 
 - **GitHub:** https://github.com/Samot89/Smart-NIBE-Control-a-Home-Assistant-MQTT.git
 - **Blueprint:** https://community.home-assistant.io/t/smart-nibe-ultra-adaptive-heat-curve-control-mqtt-spot-prices/975863
 
 ---
 
-*Poslední aktualizace: 22. ledna 2026*
-
-
+*Last updated: March 4, 2026*
