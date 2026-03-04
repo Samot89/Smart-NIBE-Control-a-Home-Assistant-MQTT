@@ -201,16 +201,16 @@ action:
       min_change_limit: !input min_change
       min_write_interval_min: !input min_write_interval_minutes
       preheat_look_ahead: 4
-      trend_val: "{{ states(trend_ent) | float(0) }}"
-      t_out_raw: "{{ state_attr(weather_ent, 'temperature') | float(0) }}"
-      t_in: "{{ states(in_temp_ent) | float(target_temp_var) }}"
-      dm_val: "{{ states(dm_ent) | float(0) }}"
-      off_curr: "{{ states(curr_off_ent) | int(0) }}"
-      cena_ted: "{{ states(spot_ent) | float(0) }}"
-      stav_pocasi: "{{ states(weather_ent) }}"
-      t_out: "{{ [[-30, t_out_raw | float(0)] | max, 30] | min }}"
-      h_index: "{{ now().hour }}"
-      now_ts: "{{ now().timestamp() }}"
+      trend_value: "{{ states(trend_ent) | float(0) }}"
+      temp_outdoor_raw: "{{ state_attr(weather_ent, 'temperature') | float(0) }}"
+      temp_indoor: "{{ states(in_temp_ent) | float(target_temp_var) }}"
+      dm_value: "{{ states(dm_ent) | float(0) }}"
+      curr_offset: "{{ states(curr_off_ent) | int(0) }}"
+      price_now: "{{ states(spot_ent) | float(0) }}"
+      weather_state: "{{ states(weather_ent) }}"
+      temp_outdoor: "{{ [[-30, temp_outdoor_raw | float(0)] | max, 30] | min }}"
+      hour_index: "{{ now().hour }}"
+      now_timestamp: "{{ now().timestamp() }}"
 
   - variables:
       today_prices_raw: >
@@ -267,23 +267,23 @@ action:
         {% set t = today_prices_list %}
         {% set tm = tomorrow_prices_list %}
         {{ (t + tm) if (t is iterable and tm is iterable) else (t if t is iterable else []) }}
-      cena_preheat: >
-        {% set idx = (h_index | int) + (preheat_look_ahead | int) %}
+      preheat_price: >
+        {% set idx = (hour_index | int) + (preheat_look_ahead | int) %}
         {% if all_prices is iterable and all_prices | length > idx %}
-          {{ all_prices[idx] | float(cena_ted) }}
-        {% else %}{{ cena_ted }}{% endif %}
+          {{ all_prices[idx] | float(price_now) }}
+        {% else %}{{ price_now }}{% endif %}
 
   - variables:
       # 1. PREHEAT BONUS
       preheat_bonus: >
-        {% if cena_preheat | float > (cena_ted | float * 1.3) and cena_ted | float < 2.5 %}
+        {% if preheat_price | float > (price_now | float * 1.3) and price_now | float < 2.5 %}
           1.5
         {% else %}0.0{% endif %}
 
       # 2. SOLAR MALUS (9:00–15:00 on sunny days)
       solar_malus: >
         {% if 9 <= now().hour <= 15 %}
-          {% set state = stav_pocasi | lower %}
+          {% set state = weather_state | lower %}
           {% if state in ['sunny', 'clear'] %}-1.0
           {% elif 'cloud' in state %}-0.5
           {% else %}0.0{% endif %}
@@ -291,19 +291,19 @@ action:
 
       # 3. FORECAST BONUS (based on weather trend)
       forecast_bonus: >
-        {{ [[trend_val | float * -0.4, 1] | min, -1] | max | round(2) }}
+        {{ [[trend_value | float * -0.4, 1] | min, -1] | max | round(2) }}
 
       # 4. EQUITHERMAL SHIFT (outdoor temp below 5°C)
-      ekvi_posun: >
-        {% if t_out | float < 5 %}
-          {{ (0 - t_out | float) / 10 }}
+      equi_shift: >
+        {% if temp_outdoor | float < 5 %}
+          {{ (0 - temp_outdoor | float) / 10 }}
         {% else %}0{% endif %}
 
       # 5. INDOOR CORRECTION (non-linear response)
-      gain_val: "{{ states(gain_ent) | float(1.2) }}"
-      bias_val: "{{ states(bias_ent) | float(0) }}"
-      temp_diff: "{{ t_in | float - (target_temp_var | float + bias_val | float) }}"
-      corr_indoor: >
+      gain_value: "{{ states(gain_ent) | float(1.2) }}"
+      bias_value: "{{ states(bias_ent) | float(0) }}"
+      temp_diff: "{{ temp_indoor | float - (target_temp_var | float + bias_value | float) }}"
+      indoor_correction: >
         {% set d = temp_diff | float %}
         {% if d >= 0.8 %}-1.5
         {% elif d >= 0.3 %}-0.7
@@ -312,12 +312,12 @@ action:
         {% else %}0.0{% endif %}
 
       # 6. CHEAP 6H BLOCK BONUS
-      bonus_6h: >
+      cheap_block_bonus: >
         {% if cheap_ent is not none and is_state(cheap_ent, 'on') %}1.0
         {% else %}0{% endif %}
 
       # 7. SPOT PRICE INFLUENCE (v4.4: reduced 3×)
-      vliv_spot_raw: "{{ (-0.3 * cena_ted | float) + 1.5 }}"
+      spot_influence_raw: "{{ (-0.3 * price_now | float) + 1.5 }}"
 
       # 8. COP BONUS – thresholds for NIBE ground-source (range 4.0–7.5)
       cop_value: >
@@ -345,22 +345,22 @@ action:
   - variables:
       # MAIN CALCULATION (8 COMPONENTS)
       raw_calc: >
-        {{ vliv_spot_raw | float + ekvi_posun | float + bonus_6h | float +
-           (corr_indoor | float * gain_val | float) + preheat_bonus | float +
+        {{ spot_influence_raw | float + equi_shift | float + cheap_block_bonus | float +
+           (indoor_correction | float * gain_value | float) + preheat_bonus | float +
            solar_malus | float + forecast_bonus | float + cop_bonus | float }}
 
-      max_step: "{% if dm_val | float < -800 %}1{% else %}2{% endif %}"
+      max_step: "{% if dm_value | float < -800 %}1{% else %}2{% endif %}"
 
       clamped_calc: >
         {% set val = raw_calc | float %}
-        {% if t_out | float < -15 and val > 2.0 %}2
+        {% if temp_outdoor | float < -15 and val > 2.0 %}2
         {% elif val > max_off_limit | float %}{{ max_off_limit | int }}
         {% elif val < min_off_limit | float %}{{ min_off_limit | int }}
         {% else %}{{ val | round | int }}{% endif %}
 
       offset_final: >
         {% set target = clamped_calc | int %}
-        {% set current = off_curr | int %}
+        {% set current = curr_offset | int %}
         {% set diff = target - current %}
         {% set step = max_step | int %}
         {% if diff > step %}{{ current + step }}
@@ -368,7 +368,7 @@ action:
         {% else %}{{ target }}{% endif %}
 
       effective_min_change: >
-        {% if trend_val | float | abs < 0.2 %}2
+        {% if trend_value | float | abs < 0.2 %}2
         {% else %}{{ min_change_limit | int }}{% endif %}
 
   - variables:
@@ -379,7 +379,7 @@ action:
           {% if dt is none %}{% set dt = states(last_write_ent) %}{% endif %}
           {{ as_timestamp(dt, 0) | float }}
         {% endif %}
-      minutes_since_write: "{{ ((now_ts - last_write_ts) / 60) | round(1) }}"
+      minutes_since_write: "{{ ((now_timestamp - last_write_ts) / 60) | round(1) }}"
       comfort_override: "{{ temp_diff | float | abs >= 0.7 }}"
       allow_write_by_time: >
         {{ last_write_ent is none or
@@ -390,9 +390,9 @@ action:
     data:
       topic: !input mqtt_debug_topic
       payload: >
-        {% set spot_influence = vliv_spot_raw | float %}
-        {% set indoor_influence = corr_indoor | float * gain_val | float %}
-        {% set equi_influence = ekvi_posun | float %}
+        {% set spot_influence = spot_influence_raw | float %}
+        {% set indoor_influence = indoor_correction | float * gain_value | float %}
+        {% set equi_influence = equi_shift | float %}
         {% set cop_influence = cop_bonus | float %}
         {{
           {
@@ -403,15 +403,15 @@ action:
             },
             "offset": {
               "final": offset_final | int,
-              "current": off_curr | int,
-              "change": offset_final | int - off_curr | int,
+              "current": curr_offset | int,
+              "change": offset_final | int - curr_offset | int,
               "raw_calculation": raw_calc | round(3)
             },
             "input_sensors": {
-              "spot_price": {"value": cena_ted | round(3), "unit": "currency/kWh"},
-              "outdoor_temperature": {"value": t_out | round(2), "weather_state": stav_pocasi},
-              "indoor_temperature": {"value": t_in | round(2), "diff_from_target": temp_diff | round(3)},
-              "degree_minutes": {"value": dm_val | round(0), "alarm": dm_val | float < -800},
+              "spot_price": {"value": price_now | round(3), "unit": "currency/kWh"},
+              "outdoor_temperature": {"value": temp_outdoor | round(2), "weather_state": weather_state},
+              "indoor_temperature": {"value": temp_indoor | round(2), "diff_from_target": temp_diff | round(3)},
+              "degree_minutes": {"value": dm_value | round(0), "alarm": dm_value | float < -800},
               "cop": {
                 "entity": cop_ent,
                 "value": cop_value | float | round(2),
@@ -425,46 +425,46 @@ action:
                 "1_spot_price_influence": {
                   "value": spot_influence | round(3),
                   "formula": "(-0.3 × price) + 1.5",
-                  "calculation": "(-0.3 × " ~ (cena_ted | round(2)) ~ ") + 1.5",
+                  "calculation": "(-0.3 × " ~ (price_now | round(2)) ~ ") + 1.5",
                   "percent_of_total": ((spot_influence / raw_calc * 100) if raw_calc != 0 else 0) | round(1)
                 },
                 "2_equithermal_shift": {
                   "value": equi_influence | round(3),
-                  "formula": "(0 - t_out) / 10 if t_out < 5°C",
-                  "active": t_out < 5,
+                  "formula": "(0 - temp_outdoor) / 10 if temp_outdoor < 5°C",
+                  "active": temp_outdoor < 5,
                   "percent_of_total": ((equi_influence / raw_calc * 100) if raw_calc != 0 else 0) | round(1)
                 },
                 "3_indoor_correction": {
                   "value": indoor_influence | round(3),
-                  "base_correction": corr_indoor | float | round(3),
-                  "gain": gain_val | round(2),
+                  "base_correction": indoor_correction | float | round(3),
+                  "gain": gain_value | round(2),
                   "percent_of_total": ((indoor_influence / raw_calc * 100) if raw_calc != 0 else 0) | round(1)
                 },
                 "4_bonus_6h_block": {
-                  "value": bonus_6h | float | round(3),
-                  "active": bonus_6h | float != 0,
+                  "value": cheap_block_bonus | float | round(3),
+                  "active": cheap_block_bonus | float != 0,
                   "configured": cheap_ent is not none,
                   "entity": cheap_ent,
                   "state": is_state(cheap_ent, 'on') if cheap_ent is not none else false,
-                  "percent_of_total": ((bonus_6h | float / raw_calc * 100) if raw_calc != 0 else 0) | round(1)
+                  "percent_of_total": ((cheap_block_bonus | float / raw_calc * 100) if raw_calc != 0 else 0) | round(1)
                 },
                 "5_preheat_bonus": {
                   "value": preheat_bonus | float | round(3),
-                  "price_in_Xh": cena_preheat | round(3),
-                  "current_price": cena_ted | round(3),
-                  "ratio": ((cena_preheat / cena_ted) if cena_ted > 0 else 0) | round(2),
+                  "price_in_Xh": preheat_price | round(3),
+                  "current_price": price_now | round(3),
+                  "ratio": ((preheat_price / price_now) if price_now > 0 else 0) | round(2),
                   "active": preheat_bonus | float != 0,
                   "percent_of_total": ((preheat_bonus | float / raw_calc * 100) if raw_calc != 0 else 0) | round(1)
                 },
                 "6_solar_malus": {
                   "value": solar_malus | float | round(3),
-                  "weather_state": stav_pocasi,
+                  "weather_state": weather_state,
                   "active": solar_malus | float != 0,
                   "percent_of_total": ((solar_malus | float / raw_calc * 100) if raw_calc != 0 else 0) | round(1)
                 },
                 "7_forecast_bonus": {
                   "value": forecast_bonus | float | round(3),
-                  "trend": trend_val | round(3),
+                  "trend": trend_value | round(3),
                   "percent_of_total": ((forecast_bonus | float / raw_calc * 100) if raw_calc != 0 else 0) | round(1)
                 },
                 "8_cop_bonus": {
@@ -477,16 +477,16 @@ action:
                   "percent_of_total": ((cop_influence / raw_calc * 100) if raw_calc != 0 else 0) | round(1)
                 }
               },
-              "control_sum": (spot_influence + equi_influence + indoor_influence + (bonus_6h | float) + (preheat_bonus | float) + (solar_malus | float) + (forecast_bonus | float) + cop_influence) | round(3)
+              "control_sum": (spot_influence + equi_influence + indoor_influence + (cheap_block_bonus | float) + (preheat_bonus | float) + (solar_malus | float) + (forecast_bonus | float) + cop_influence) | round(3)
             },
             "protection_and_limits": {
-              "dm_guard": {"degree_minutes": dm_val | round(0), "max_step": max_step | int},
+              "dm_guard": {"degree_minutes": dm_value | round(0), "max_step": max_step | int},
               "eeprom_protection": {"minutes_since_write": minutes_since_write | float, "write_allowed": allow_write_by_time or comfort_override}
             },
             "decision": {
               "checks": {
                 "sensors_available": states(spot_ent) != 'unavailable' and states(weather_ent) != 'unavailable',
-                "sufficient_change": (off_curr | int - offset_final | int) | abs >= effective_min_change | int
+                "sufficient_change": (curr_offset | int - offset_final | int) | abs >= effective_min_change | int
               }
             }
           } | tojson
@@ -497,7 +497,7 @@ action:
     data:
       name: "NIBE v4.4"
       message: >
-        Offset={{ offset_final | int }} ({{ offset_final | int - off_curr | int }}),
+        Offset={{ offset_final | int }} ({{ offset_final | int - curr_offset | int }}),
         raw={{ raw_calc | round(2) }}, COP={{ cop_value | round(2) }}, 8 components
       entity_id: "{{ spot_ent }}"
 
@@ -506,7 +506,7 @@ action:
   - condition: template
     value_template: "{{ states(spot_ent) != 'unavailable' }}"
   - condition: template
-    value_template: "{{ (off_curr | int - offset_final | int) | abs >= effective_min_change | int }}"
+    value_template: "{{ (curr_offset | int - offset_final | int) | abs >= effective_min_change | int }}"
   - condition: template
     value_template: "{{ allow_write_by_time or comfort_override }}"
 
@@ -523,6 +523,6 @@ action:
           - service: input_datetime.set_datetime
             data:
               entity_id: "{{ last_write_ent }}"
-              timestamp: "{{ now_ts }}"
+              timestamp: "{{ now_timestamp }}"
 
 mode: single
