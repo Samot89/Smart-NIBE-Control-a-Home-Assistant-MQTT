@@ -130,6 +130,8 @@ sensor.last_nibe_offset           # Last written offset
 
 ![Dashboard overview](Screenshot_1.png)
 ![Offset detail](Screenshot_2.png)
+![Electricity usage – daily consumption with 27.53 kWh total, all supplied from the grid](Screenshot_4.jpg)
+![Offset vs spot price (24h) – blue line shows offset (1), orange area shows spot price (3.5 Kč/kWh)](Screenshot_3.jpg)
 
 ---
 
