@@ -57,6 +57,12 @@ a nastavují se na začátku `vv_ai.py`.
 > ⚠️ V čerpadle **vypněte Smart Price Adaption** (menu 4.1.6) – jinak by
 > čerpadlo režim TUV měnilo samo.
 
+> ⚠️ **Periodu TUV (registr 47134) nechte na původní hodnotě (typicky 20–30 min), nikdy 0.**
+> VV-AI mění jen režim TUV a ohřev dělá čerpadlo samo podle start/stop teplot režimu.
+> S periodou 0 by čerpadlo TUV neohřálo vůbec. (Periodu 0 používá jiné řešení –
+> VV-AI zabudované v NibePi, které spouští ohřev samo přes registr 48132. Obě
+> řešení nekombinujte.)
+
 ---
 
 ## 🚀 Instalace
@@ -138,6 +144,7 @@ entities:
 | Profil se nenaplňuje | odběry jsou menší než `DROP_MIN` (2 °C/h) – snižte, nebo počkejte na větší odběr |
 | „Umytí rukou“ se počítá jako odběr | zvyšte `DROP_MIN` na 3 |
 | Režim se nemění v čerpadle | ověřte zápis do 47041 přes `HW_TOPIC`, vypněte Smart Price Adaption |
+| TUV se vůbec neohřívá | perioda TUV (47134) je 0 – nastavte zpět na 20–30 min (typicky po přechodu z VV-AI v NibePi) |
 | Po restartu HA prázdný profil | MQTT broker neuchovává retained zprávy (persistence vypnutá) |
 
 ### Reset profilu
