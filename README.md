@@ -1,6 +1,6 @@
 # 🏠 Smart NIBE Control – Adaptive Heat Pump Control
 
-[![Version](https://img.shields.io/badge/version-v4.4-blue)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-v4.5-blue)](CHANGELOG.md)
 [![Platform](https://img.shields.io/badge/Home%20Assistant-Blueprint-41BDF5?logo=homeassistant)](https://www.home-assistant.io/)
 [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
@@ -20,6 +20,16 @@ An intelligent Home Assistant blueprint that adaptively controls a NIBE heat pum
 | 📊 **Degree-minutes** | Protects the compressor and prevents bivalence activation |
 | 🌤️ **Forecast bonus** | Responds to weather forecast (cooling/warming trend) |
 | 🔧 **Smooth change** | Limits offset jump to ±1 per hour |
+
+### 🚿 New: VV-AI – smart hot water control
+
+An optional pyscript that learns when hot water is used (weekly profile from the BT6
+temperature drop) and switches the hot water comfort mode (register 47041:
+Economy / Normal / Luxury) based on that profile, the electricity price and PV surplus,
+with BT6/BT7 safety floors. It runs next to the blueprint: the blueprint controls
+heating (47011), VV-AI controls hot water (47041).
+
+➡️ Description and installation (Czech): [docs/vv-ai.md](docs/vv-ai.md) · files in [`vv_ai/`](vv_ai/)
 
 ---
 

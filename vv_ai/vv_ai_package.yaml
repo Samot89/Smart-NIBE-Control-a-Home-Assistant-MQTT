@@ -1,0 +1,48 @@
+# VV-AI – Home Assistant balicek (package)
+# Ulozte jako /config/packages/vv_ai.yaml a v configuration.yaml mejte:
+#   homeassistant:
+#     packages: !include_dir_named packages
+#
+# Nahradte sensor.grid_export_power svym senzorem pretoku do site (W).
+# Pokud FVE nemate, sekci "sensor:" smazte – VV-AI pak FVE boost preskoci.
+
+mqtt:
+  sensor:
+    # Posledni rozhodnuti VV-AI (Economy / Normal / Luxury) + duvod v atributech
+    - name: "VV-AI rozhodnutí"
+      unique_id: vv_ai_ha_mode
+      state_topic: "nibepi/vv_ai/ha_mode"
+      value_template: "{{ value_json.name }}"
+      json_attributes_topic: "nibepi/vv_ai/ha_mode"
+      json_attributes_template: "{{ value }}"
+      icon: mdi:water-boiler-auto
+
+    # Diagnostika uceni: status:hodina_tydne, atributy bt6, learned, nonzero_slots
+    - name: "VV-AI diagnostika"
+      unique_id: vv_ai_diag
+      state_topic: "nibepi/vv_ai/diag"
+      value_template: "{{ value_json.status }}:{{ value_json.hi | default('?') }}"
+      json_attributes_topic: "nibepi/vv_ai/diag"
+      icon: mdi:bug-check
+
+    # Uloziste profilu: profile[], counts[], last_bt6, last_hi jako JSON atributy.
+    # Pyscript z nej profil cte – entity_id musi odpovidat STORE_ENTITY ve vv_ai.py.
+    - name: "VV-AI profil uloziste"
+      unique_id: vv_ai_profile_store
+      state_topic: "nibepi/vv_ai/profile_store"
+      value_template: "{{ value_json.last_bt6 | default('none') }}"
+      json_attributes_topic: "nibepi/vv_ai/profile_store"
+      json_attributes_template: "{{ value }}"
+      icon: mdi:database
+
+sensor:
+  # Klouzavy prumer FVE pretoku, aby mrak nepreklapel rezim TUV
+  - platform: statistics
+    name: "Pretoky klouzavy prumer 15min"
+    unique_id: pretoky_15min_stats
+    entity_id: sensor.grid_export_power
+    state_characteristic: average_step
+    max_age:
+      minutes: 10
+    sampling_size: 1000
+    precision: 2

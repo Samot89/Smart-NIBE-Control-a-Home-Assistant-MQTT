@@ -6,6 +6,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [v4.5] – 2026-10-28
+
+### Added
+- **VV-AI** – smart hot water control as a pyscript (`vv_ai/vv_ai.py`): learns a weekly
+  hot water usage profile (168 hourly slots from the BT6 drop) and sets the hot water
+  comfort mode (47041) every 15 minutes by profile, electricity price and PV surplus,
+  with BT6/BT7 safety floors. Profile stored as a retained MQTT message.
+- `vv_ai/vv_ai_package.yaml` – MQTT sensors (decision, diagnostics, profile store) and
+  a PV surplus average
+- `docs/vv-ai.md` – description, installation, troubleshooting (Czech)
+
+---
+
 ## [v4.4] – 2026-03-02
 
 ### Changed

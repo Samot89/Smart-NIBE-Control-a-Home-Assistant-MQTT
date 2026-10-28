@@ -28,6 +28,10 @@ Think of it as a *brain*, not a switch.
 - Communication via **MQTT / nibepi**
 - Full transparency via **debug MQTT logs**
 
+> 🚿 **Hot water:** the optional **VV-AI** pyscript learns your hot water usage and
+> switches the hot water comfort mode (47041) by usage profile, electricity price and
+> PV surplus. See [docs/vv-ai.md](docs/vv-ai.md) (Czech) and [`vv_ai/`](vv_ai/).
+
 ---
 
 ## 🧠 Design Philosophy
