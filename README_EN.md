@@ -284,3 +284,11 @@ This project is licensed under the MIT License – see the [LICENSE](LICENSE) fi
 - [nibepi project](https://github.com/anerdins/nibepi) for the MQTT-Modbus bridge
 - Home Assistant community for integrations and support
 - [Community discussion](https://community.home-assistant.io/t/smart-nibe-ultra-adaptive-heat-curve-control-mqtt-spot-prices/975863)
+
+## ☕ Support
+
+If you like this project and it helped you, you can buy me a coffee:
+
+[![Buy me a coffee via PayPal](https://img.shields.io/badge/PayPal-Buy%20me%20a%20coffee%20%E2%98%95-00457C?logo=paypal&logoColor=white)](https://paypal.me/sulc89)
+
+Thank you! Donations are voluntary, the project stays free.
