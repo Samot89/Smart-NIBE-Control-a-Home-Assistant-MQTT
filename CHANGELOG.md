@@ -6,6 +6,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [v4.6] – 2026-11-19
+
+### Added
+- `target_temp_entity` (optional): take the target indoor temperature from an entity
+  (`input_number`, `number` or `sensor`), so it can be changed from a dashboard or an automation.
+  Falls back to the fixed `target_temp` when not set or not numeric. (#3)
+- MQTT debug payload: `input_sensors.target_temperature` (value, bias, source).
+
+### Changed
+- `current_offset` now also accepts `number` and `input_number` entities (e.g. the NIBE
+  integration exposes register 47011 as a `number`). (#3)
+
+---
+
 ## [v4.5.1] – 2026-11-19
 
 ### Fixed

@@ -1,5 +1,5 @@
 blueprint:
-  name: Smart NIBE – v4.5.1
+  name: Smart NIBE – v4.6
   description: |
     Adaptive heat pump offset control for NIBE via MQTT/Modbus.
 
@@ -69,9 +69,13 @@ blueprint:
 
     current_offset:
       name: 🎚️ Current NIBE offset sensor
+      description: Current heat curve offset (register 47011) – a sensor or a number entity.
       selector:
         entity:
-          domain: sensor
+          domain:
+            - sensor
+            - number
+            - input_number
 
     # ==========================================
     # COP SENSOR v4.3
@@ -124,12 +128,27 @@ blueprint:
     # ==========================================
     target_temp:
       name: 🌡️ Target indoor temperature
+      description: Fixed target, used when no target temperature entity is selected.
       default: 21.5
       selector:
         number:
           min: 18
           max: 24
           step: 0.1
+
+    target_temp_entity:
+      name: 🌡️ Target indoor temperature entity (optional)
+      description: >
+        Optional – e.g. an input_number helper, so the target can be changed from a
+        dashboard or an automation without editing the blueprint. Falls back to the
+        fixed target above when not set or not numeric.
+      default: none
+      selector:
+        entity:
+          domain:
+            - input_number
+            - number
+            - sensor
 
     max_offset:
       name: ⬆️ Maximum offset
@@ -201,7 +220,10 @@ action:
       hdo_set: "{{ hdo_ent not in [none, '', 'none'] }}"
       last_write_set: "{{ last_write_ent not in [none, '', 'none'] }}"
       cop_set: "{{ cop_ent not in [none, '', 'none'] }}"
-      target_temp_var: !input target_temp
+      target_temp_fixed: !input target_temp
+      target_temp_ent: !input target_temp_entity
+      target_temp_set: "{{ target_temp_ent not in [none, '', 'none'] and is_number(states(target_temp_ent)) }}"
+      target_temp_var: "{{ states(target_temp_ent) | float if target_temp_set else target_temp_fixed | float }}"
       max_off_limit: !input max_offset
       min_off_limit: !input min_offset
       min_change_limit: !input min_change
@@ -403,7 +425,7 @@ action:
         {{
           {
             "metadata": {
-              "version": "4.5.1",
+              "version": "4.6",
               "timestamp": now().isoformat(),
               "components_count": 8
             },
@@ -417,6 +439,7 @@ action:
               "spot_price": {"value": price_now | round(3), "unit": "currency/kWh"},
               "outdoor_temperature": {"value": temp_outdoor | round(2), "weather_state": weather_state},
               "indoor_temperature": {"value": temp_indoor | round(2), "diff_from_target": temp_diff | round(3)},
+              "target_temperature": {"value": target_temp_var | float | round(2), "bias": bias_value | float | round(2), "source": target_temp_ent if target_temp_set else "fixed"},
               "degree_minutes": {"value": dm_value | round(0), "alarm": dm_value | float < -800},
               "cop": {
                 "entity": cop_ent,
@@ -501,7 +524,7 @@ action:
 
   - service: logbook.log
     data:
-      name: "NIBE v4.5.1"
+      name: "NIBE v4.6"
       message: >
         Offset={{ offset_final | int }} ({{ offset_final | int - curr_offset | int }}),
         raw={{ raw_calc | round(2) }}, COP={{ cop_value | round(2) }}, 8 components
