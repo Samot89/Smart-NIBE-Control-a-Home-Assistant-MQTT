@@ -107,6 +107,35 @@ otherwise oscillation and unnecessary writes would occur.
 
 ---
 
+### 🔹 Last write timestamp (EEPROM protection)
+
+`input_datetime.nibe_last_write` – **date and time** must both be enabled
+
+**Purpose:**
+The blueprint stores the time of every offset write here and does not write again
+until `min_write_interval_minutes` (default 45 min) have passed.
+
+**Important:**
+Select this helper in the blueprint input *Helper for last write timestamp*.
+Without it the minimum write interval is **not enforced**.
+
+**Exception (comfort override):**
+When the indoor temperature is 0.7 °C or more away from the target, a write is allowed
+even before the interval has passed.
+
+Create it in *Settings → Devices & services → Helpers → Create helper → Date and/or time*
+(choose *Date and time*), or in YAML:
+
+```yaml
+input_datetime:
+  nibe_last_write:
+    name: NIBE last offset write
+    has_date: true
+    has_time: true
+```
+
+---
+
 ### 🔹 Optional: HDO / grid blocking
 
 `binary_sensor.hdo`

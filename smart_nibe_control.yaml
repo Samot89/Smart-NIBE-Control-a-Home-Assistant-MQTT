@@ -176,6 +176,11 @@ blueprint:
 
     min_write_interval_minutes:
       name: ⏱️ Minimum interval between writes (EEPROM protection)
+      description: >
+        No new offset is written to NIBE until this many minutes have passed since the
+        last write. Only enforced when the "last write timestamp" helper below is selected.
+        Exception: a write is still allowed when the indoor temperature is 0.7 °C or more
+        away from the target (comfort override).
       default: 45
       selector:
         number:
@@ -185,6 +190,10 @@ blueprint:
 
     last_write_helper:
       name: 🕐 Helper for last write timestamp
+      description: >
+        An input_datetime helper with BOTH date and time. The blueprint stores the time of
+        every write here. Required for the minimum write interval above – without it the
+        interval is not enforced.
       default: none
       selector:
         entity:
