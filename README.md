@@ -79,10 +79,20 @@ Correction is non-linear (±0.3, ±0.7, ±1.5) and multiplied by `indoor_respons
 ## 🚀 Installation
 
 ### 1. Import the blueprint
+
+[![Import Blueprint](https://my.home-assistant.io/badges/blueprint_import.svg)](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https://github.com/Samot89/Smart-NIBE-Control-a-Home-Assistant-MQTT/blob/main/smart_nibe_control.yaml)
+
+Click the button above, or import it manually:
 ```
 Settings → Automations → Blueprints → Import Blueprint
 ```
-Enter the URL of this repository or upload the `smart_nibe_control.yaml` file manually.
+and paste the URL of the **blueprint file** (not of the repository):
+```
+https://github.com/Samot89/Smart-NIBE-Control-a-Home-Assistant-MQTT/blob/main/smart_nibe_control.yaml
+```
+> ⚠️ The repository URL (`https://github.com/Samot89/Smart-NIBE-Control-a-Home-Assistant-MQTT` or `.git`) does not work – Home Assistant downloads the GitHub web page instead of the YAML and fails with `mapping values are not allowed here ... --tab-size-preference: 4;`.
+
+Alternatively copy `smart_nibe_control.yaml` to `/config/blueprints/automation/` and reload automations.
 
 ### 2. Create helpers (input_number)
 
