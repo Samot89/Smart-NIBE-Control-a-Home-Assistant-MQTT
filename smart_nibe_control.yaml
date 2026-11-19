@@ -1,5 +1,5 @@
 blueprint:
-  name: Smart NIBE – v4.4
+  name: Smart NIBE – v4.5.1
   description: |
     Adaptive heat pump offset control for NIBE via MQTT/Modbus.
 
@@ -195,6 +195,12 @@ action:
       hdo_ent: !input hdo
       last_write_ent: !input last_write_helper
       cop_ent: !input cop_sensor
+      # Optional inputs: `default: none` is the string "none" in YAML, not null,
+      # and a cleared selector can give "". Treat all of them as "not configured".
+      cheap_set: "{{ cheap_ent not in [none, '', 'none'] }}"
+      hdo_set: "{{ hdo_ent not in [none, '', 'none'] }}"
+      last_write_set: "{{ last_write_ent not in [none, '', 'none'] }}"
+      cop_set: "{{ cop_ent not in [none, '', 'none'] }}"
       target_temp_var: !input target_temp
       max_off_limit: !input max_offset
       min_off_limit: !input min_offset
@@ -313,7 +319,7 @@ action:
 
       # 6. CHEAP 6H BLOCK BONUS
       cheap_block_bonus: >
-        {% if cheap_ent is not none and is_state(cheap_ent, 'on') %}1.0
+        {% if cheap_set and is_state(cheap_ent, 'on') %}1.0
         {% else %}0{% endif %}
 
       # 7. SPOT PRICE INFLUENCE (v4.4: reduced 3×)
@@ -321,7 +327,7 @@ action:
 
       # 8. COP BONUS – thresholds for NIBE ground-source (range 4.0–7.5)
       cop_value: >
-        {% if cop_ent is none %}
+        {% if not cop_set %}
           6.0
         {% else %}
           {{ states(cop_ent) | float(6.0) }}
@@ -373,7 +379,7 @@ action:
 
   - variables:
       last_write_ts: >
-        {% if last_write_ent is none %}0
+        {% if not last_write_set %}0
         {% else %}
           {% set dt = state_attr(last_write_ent, 'datetime') %}
           {% if dt is none %}{% set dt = states(last_write_ent) %}{% endif %}
@@ -382,7 +388,7 @@ action:
       minutes_since_write: "{{ ((now_timestamp - last_write_ts) / 60) | round(1) }}"
       comfort_override: "{{ temp_diff | float | abs >= 0.7 }}"
       allow_write_by_time: >
-        {{ last_write_ent is none or
+        {{ not last_write_set or
            minutes_since_write | float >= min_write_interval_min | float }}
 
   # MQTT DEBUG PUBLISH
@@ -397,7 +403,7 @@ action:
         {{
           {
             "metadata": {
-              "version": "4.4",
+              "version": "4.5.1",
               "timestamp": now().isoformat(),
               "components_count": 8
             },
@@ -415,7 +421,7 @@ action:
               "cop": {
                 "entity": cop_ent,
                 "value": cop_value | float | round(2),
-                "configured": cop_ent is not none,
+                "configured": cop_set,
                 "quality": "Excellent" if cop_value | float > 7.0 else ("Very good" if cop_value | float > 6.5 else ("Good" if cop_value | float > 6.0 else ("Average" if cop_value | float > 5.0 else ("Poor" if cop_value | float > 4.0 else "Very poor (frost)"))))
               }
             },
@@ -443,9 +449,9 @@ action:
                 "4_bonus_6h_block": {
                   "value": cheap_block_bonus | float | round(3),
                   "active": cheap_block_bonus | float != 0,
-                  "configured": cheap_ent is not none,
+                  "configured": cheap_set,
                   "entity": cheap_ent,
-                  "state": is_state(cheap_ent, 'on') if cheap_ent is not none else false,
+                  "state": is_state(cheap_ent, 'on') if cheap_set else false,
                   "percent_of_total": ((cheap_block_bonus | float / raw_calc * 100) if raw_calc != 0 else 0) | round(1)
                 },
                 "5_preheat_bonus": {
@@ -470,7 +476,7 @@ action:
                 "8_cop_bonus": {
                   "value": cop_influence | round(3),
                   "cop": cop_value | float | round(2),
-                  "configured": cop_ent is not none,
+                  "configured": cop_set,
                   "formula": "COP >7.0→-0.8, >6.5→-0.5, >6.0→-0.3, <4.0→+0.8, <5.0→+0.5",
                   "logic": "High COP = efficient HP → reduce offset. Low COP = frost/inefficient → increase offset",
                   "active": cop_influence != 0,
@@ -495,14 +501,14 @@ action:
 
   - service: logbook.log
     data:
-      name: "NIBE v4.4"
+      name: "NIBE v4.5.1"
       message: >
         Offset={{ offset_final | int }} ({{ offset_final | int - curr_offset | int }}),
         raw={{ raw_calc | round(2) }}, COP={{ cop_value | round(2) }}, 8 components
       entity_id: "{{ spot_ent }}"
 
   - condition: template
-    value_template: "{{ hdo_ent is none or is_state(hdo_ent, 'on') }}"
+    value_template: "{{ not hdo_set or is_state(hdo_ent, 'on') }}"
   - condition: template
     value_template: "{{ states(spot_ent) != 'unavailable' }}"
   - condition: template
@@ -518,7 +524,7 @@ action:
   - choose:
       - conditions:
           - condition: template
-            value_template: "{{ last_write_ent is not none }}"
+            value_template: "{{ last_write_set }}"
         sequence:
           - service: input_datetime.set_datetime
             data:

@@ -6,6 +6,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [v4.5.1] – 2026-11-19
+
+### Fixed
+- **Optional HDO input blocked all writes** (#4) – `default: none` is the string `"none"` in YAML,
+  not null, so `hdo_ent is none` was always false and the HDO condition aborted every run when
+  no HDO sensor was selected. Optional inputs (`hdo`, `cheap_block`, `cop_sensor`,
+  `last_write_helper`) are now treated as "not configured" when they are null, empty or `"none"`.
+  This also fixes `configured: true` in the MQTT debug payload for unset COP / 6h block sensors
+  and the failing `input_datetime.set_datetime` call when no last-write helper is selected.
+
+---
+
 ## [v4.5] – 2026-10-28
 
 ### Added
