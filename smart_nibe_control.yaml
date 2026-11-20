@@ -1,5 +1,5 @@
 blueprint:
-  name: Smart NIBE – v4.6
+  name: Smart NIBE – v4.7
   description: |
     Adaptive heat pump offset control for NIBE via MQTT/Modbus.
 
@@ -109,10 +109,26 @@ blueprint:
           domain: input_number
 
     # ==========================================
-    # MQTT
+    # OFFSET WRITE / MQTT
     # ==========================================
+    offset_write_method:
+      name: ✍️ How to write the offset
+      description: >
+        MQTT – publish to the topic below (NibePi / Modbus–MQTT bridge).
+        Entity – set the "Current NIBE offset" entity directly with set_value; it must be a
+        number or input_number entity (e.g. NIBE or myUplink integration).
+      default: mqtt
+      selector:
+        select:
+          options:
+            - label: MQTT topic (NibePi / Modbus–MQTT)
+              value: mqtt
+            - label: Set the "Current NIBE offset" entity (number)
+              value: entity
+
     mqtt_topic:
       name: 📡 MQTT topic (offset write)
+      description: Only used when the offset is written via MQTT.
       default: nibe/modbus/47011/set
       selector:
         text:
@@ -188,6 +204,20 @@ blueprint:
           max: 240
           step: 5
 
+    comfort_override_delta:
+      name: 🛟 Comfort override threshold
+      description: >
+        When the indoor temperature is at least this many °C away from the target, the
+        minimum write interval is bypassed so the house is corrected quickly.
+        0 = off (the interval is always respected).
+      default: 0.7
+      selector:
+        number:
+          min: 0
+          max: 3
+          step: 0.1
+          unit_of_measurement: "°C"
+
     last_write_helper:
       name: 🕐 Helper for last write timestamp
       description: >
@@ -242,7 +272,12 @@ action:
       temp_outdoor_raw: "{{ state_attr(weather_ent, 'temperature') | float(0) }}"
       temp_indoor: "{{ states(in_temp_ent) | float(target_temp_var) }}"
       dm_value: "{{ states(dm_ent) | float(0) }}"
+      # Integrations like myUplink make their entities unavailable for a while after a
+      # write – never compute or write from an unknown current offset.
+      offset_available: "{{ is_number(states(curr_off_ent)) }}"
       curr_offset: "{{ states(curr_off_ent) | int(0) }}"
+      write_method: !input offset_write_method
+      comfort_delta: !input comfort_override_delta
       price_now: "{{ states(spot_ent) | float(0) }}"
       weather_state: "{{ states(weather_ent) }}"
       temp_outdoor: "{{ [[-30, temp_outdoor_raw | float(0)] | max, 30] | min }}"
@@ -417,7 +452,7 @@ action:
           {{ as_timestamp(dt, 0) | float }}
         {% endif %}
       minutes_since_write: "{{ ((now_timestamp - last_write_ts) / 60) | round(1) }}"
-      comfort_override: "{{ temp_diff | float | abs >= 0.7 }}"
+      comfort_override: "{{ comfort_delta | float > 0 and temp_diff | float | abs >= comfort_delta | float }}"
       allow_write_by_time: >
         {{ not last_write_set or
            minutes_since_write | float >= min_write_interval_min | float }}
@@ -434,7 +469,7 @@ action:
         {{
           {
             "metadata": {
-              "version": "4.6",
+              "version": "4.7",
               "timestamp": now().isoformat(),
               "components_count": 8
             },
@@ -519,11 +554,13 @@ action:
             },
             "protection_and_limits": {
               "dm_guard": {"degree_minutes": dm_value | round(0), "max_step": max_step | int},
-              "eeprom_protection": {"minutes_since_write": minutes_since_write | float, "write_allowed": allow_write_by_time or comfort_override}
+              "eeprom_protection": {"minutes_since_write": minutes_since_write | float, "write_allowed": allow_write_by_time or comfort_override, "interval_ok": allow_write_by_time, "comfort_override": comfort_override, "comfort_override_delta": comfort_delta | float}
             },
             "decision": {
+              "write_method": write_method,
               "checks": {
                 "sensors_available": states(spot_ent) != 'unavailable' and states(weather_ent) != 'unavailable',
+                "current_offset_available": offset_available,
                 "sufficient_change": (curr_offset | int - offset_final | int) | abs >= effective_min_change | int
               }
             }
@@ -533,7 +570,7 @@ action:
 
   - service: logbook.log
     data:
-      name: "NIBE v4.6"
+      name: "NIBE v4.7"
       message: >
         Offset={{ offset_final | int }} ({{ offset_final | int - curr_offset | int }}),
         raw={{ raw_calc | round(2) }}, COP={{ cop_value | round(2) }}, 8 components
@@ -544,14 +581,27 @@ action:
   - condition: template
     value_template: "{{ states(spot_ent) != 'unavailable' }}"
   - condition: template
+    value_template: "{{ offset_available }}"
+  - condition: template
     value_template: "{{ (curr_offset | int - offset_final | int) | abs >= effective_min_change | int }}"
   - condition: template
     value_template: "{{ allow_write_by_time or comfort_override }}"
 
-  - service: mqtt.publish
-    data:
-      topic: !input mqtt_topic
-      payload: "{{ offset_final | int }}"
+  - choose:
+      - conditions:
+          - condition: template
+            value_template: "{{ write_method == 'entity' }}"
+        sequence:
+          - service: "{{ curr_off_ent.split('.')[0] }}.set_value"
+            target:
+              entity_id: "{{ curr_off_ent }}"
+            data:
+              value: "{{ offset_final | int }}"
+    default:
+      - service: mqtt.publish
+        data:
+          topic: !input mqtt_topic
+          payload: "{{ offset_final | int }}"
 
   - choose:
       - conditions:

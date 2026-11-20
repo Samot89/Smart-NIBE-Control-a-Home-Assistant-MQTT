@@ -6,6 +6,23 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [v4.7] – 2026-11-20
+
+### Added
+- `offset_write_method`: write the offset via MQTT (default, unchanged) or directly to the
+  *Current NIBE offset* entity with `number.set_value` / `input_number.set_value` – works with
+  the NIBE and myUplink integrations without NibePi. (#6)
+- `comfort_override_delta`: configurable threshold for the comfort override that bypasses the
+  minimum write interval (default 0.7 °C as before, 0 = off). (#6)
+- MQTT debug: `eeprom_protection.interval_ok`, `comfort_override`, `comfort_override_delta`,
+  `decision.write_method`, `decision.checks.current_offset_available`.
+
+### Fixed
+- No write when the *Current NIBE offset* entity is unavailable / unknown (e.g. myUplink after
+  a write). Previously it was read as 0, which caused unnecessary writes. (#6)
+
+---
+
 ## [v4.6] – 2026-11-19
 
 ### Added

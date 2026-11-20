@@ -69,7 +69,7 @@ Correction is non-linear (±0.3, ±0.7, ±1.5) and multiplied by `indoor_respons
 - **NIBE heat pump** (S-series, F-series with VVM 320/500)
 - **Home Assistant** 2024.1+
 - **MQTT broker** (Mosquitto)
-- **nibepi bridge** or equivalent for Modbus–MQTT
+- **nibepi bridge** or equivalent for Modbus–MQTT – or the NIBE / myUplink integration (offset written directly to its `number` entity, see *How to write the offset*)
 - **Spot prices** – integration e.g. Nordpool / Amber Electric
 - **Outdoor temperature** – sensor or weather integration
 - **Indoor temperature** – sensor in the living space
