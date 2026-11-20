@@ -6,6 +6,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [v4.8] – 2026-11-20
+
+### Changed
+- The weather forecast trend is now calculated by the blueprint from the hourly forecast of the
+  selected weather entity (`weather.get_forecasts`, average of the next 6 hours − current outdoor
+  temperature). The *Weather forecast trend* helper is now optional and only used as a fallback
+  when the weather entity has no hourly forecast. (#8)
+- MQTT debug: `component_breakdown.7_forecast_bonus.trend_source` (`forecast` / `helper` / `none`).
+
+### Fixed
+- A forecast trend helper that was never updated (stuck at its minimum −10) added a permanent
+  +1 to the offset. With the built-in calculation this can no longer happen. (#8)
+
+---
+
 ## [v4.7] – 2026-11-20
 
 ### Added

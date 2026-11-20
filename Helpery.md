@@ -136,6 +136,23 @@ input_datetime:
 
 ---
 
+### 🔹 Weather forecast trend (not needed since v4.8)
+
+`input_number.weather_forecast_trend`
+
+Since v4.8 the blueprint calculates the trend itself from the **hourly forecast of the weather
+entity** (`weather.get_forecasts`): average of the next 6 hours minus the current outdoor temperature.
+Leave the input *Weather forecast trend helper* empty.
+
+The helper is only a **fallback** for weather entities without an hourly forecast. In that case
+it must be kept up to date by an automation (example:
+[`Weather - Update forecast values.yaml`](Weather%20-%20Update%20forecast%20values.yaml) – replace
+`weather.domov_2` with your weather entity). A helper that is never updated stays at its minimum
+(−10) and adds a permanent +1 to the offset. The debug payload shows the used source in
+`component_breakdown.7_forecast_bonus.trend_source` (`forecast` / `helper` / `none`).
+
+---
+
 ### 🔹 Optional: HDO / grid blocking
 
 `binary_sensor.hdo`
@@ -167,17 +184,11 @@ input_number:
     max: 1.5
     step: 0.1
 
+  # Only needed as a fallback for weather entities without an hourly forecast (see above)
   weather_forecast_trend:
     name: Weather trend (upcoming hours)
     min: -10
     max: 10
-    step: 0.1
-    unit_of_measurement: "°C"
-
-  weather_forecast_avg_6h:
-    name: Forecast avg 6h
-    min: -30
-    max: 20
     step: 0.1
     unit_of_measurement: "°C"
 ```

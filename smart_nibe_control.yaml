@@ -1,5 +1,5 @@
 blueprint:
-  name: Smart NIBE – v4.7
+  name: Smart NIBE – v4.8
   description: |
     Adaptive heat pump offset control for NIBE via MQTT/Modbus.
 
@@ -55,7 +55,13 @@ blueprint:
           domain: sensor
 
     forecast_trend:
-      name: 📈 Weather forecast trend
+      name: 📈 Weather forecast trend helper (optional)
+      description: >-
+        Not needed since v4.8 – the trend (average of the next 6 hours minus the current
+        outdoor temperature) is calculated from the hourly forecast of the weather entity above.
+        This helper is only used as a fallback when the weather entity provides no hourly
+        forecast; it must then be kept up to date by your own automation.
+      default: none
       selector:
         entity:
           domain: input_number
@@ -240,6 +246,16 @@ trigger:
     minutes: !input run_interval_minutes
 
 action:
+  # Hourly forecast for the forecast trend (weather entities without an hourly
+  # forecast raise an error – ignored, the optional helper is used instead).
+  - service: weather.get_forecasts
+    continue_on_error: true
+    target:
+      entity_id: !input outdoor_weather
+    data:
+      type: hourly
+    response_variable: forecast_resp
+
   - variables:
       spot_ent: !input spot_price
       weather_ent: !input outdoor_weather
@@ -268,8 +284,23 @@ action:
       min_change_limit: !input min_change
       min_write_interval_min: !input min_write_interval_minutes
       preheat_look_ahead: 4
-      trend_value: "{{ states(trend_ent) | float(0) }}"
       temp_outdoor_raw: "{{ state_attr(weather_ent, 'temperature') | float(0) }}"
+      # Forecast trend = average of the next 6 hourly forecast temperatures − current outdoor temp
+      trend_forecast: >
+        {% set ns = namespace(t=[]) %}
+        {% if forecast_resp is defined and forecast_resp is mapping and weather_ent in forecast_resp %}
+          {% for f in (forecast_resp[weather_ent].forecast or [])[:6] %}
+            {% if f.temperature is number %}{% set ns.t = ns.t + [f.temperature] %}{% endif %}
+          {% endfor %}
+        {% endif %}
+        {% if ns.t | length > 0 %}{{ ((ns.t | average) - temp_outdoor_raw | float(0)) | round(1) }}{% else %}none{% endif %}
+      trend_set: "{{ trend_ent not in [none, '', 'none'] and is_number(states(trend_ent)) }}"
+      trend_source: >
+        {% if is_number(trend_forecast) %}forecast{% elif trend_set %}helper{% else %}none{% endif %}
+      trend_value: >
+        {% if trend_source == 'forecast' %}{{ trend_forecast | float }}
+        {% elif trend_source == 'helper' %}{{ states(trend_ent) | float(0) }}
+        {% else %}0{% endif %}
       temp_indoor: "{{ states(in_temp_ent) | float(target_temp_var) }}"
       dm_value: "{{ states(dm_ent) | float(0) }}"
       # Integrations like myUplink make their entities unavailable for a while after a
@@ -537,7 +568,8 @@ action:
                 },
                 "7_forecast_bonus": {
                   "value": forecast_bonus | float | round(3),
-                  "trend": trend_value | round(3),
+                  "trend": trend_value | float | round(3),
+                  "trend_source": trend_source,
                   "percent_of_total": ((forecast_bonus | float / raw_calc * 100) if raw_calc != 0 else 0) | round(1)
                 },
                 "8_cop_bonus": {

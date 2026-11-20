@@ -1,3 +1,6 @@
+# OPTIONAL since Smart NIBE v4.8 – the blueprint calculates the forecast trend itself
+# from the hourly forecast of the weather entity. Use this automation only if your weather
+# entity has no hourly forecast. Replace weather.domov_2 with your weather entity.
 alias: Weather - Update forecast values
 triggers:
   - minutes: "0"

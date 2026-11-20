@@ -1,6 +1,6 @@
 # 🏠 Smart NIBE Control – Adaptive Heat Pump Control
 
-[![Version](https://img.shields.io/badge/version-v4.5-blue)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-v4.8-blue)](CHANGELOG.md)
 [![Platform](https://img.shields.io/badge/Home%20Assistant-Blueprint-41BDF5?logo=homeassistant)](https://www.home-assistant.io/)
 [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
@@ -100,8 +100,10 @@ Alternatively copy `smart_nibe_control.yaml` to `/config/blueprints/automation/`
 |--------|-----|-----|------|-------------------|
 | `input_number.indoor_bias` | −1.0 | 1.0 | 0.1 | **0.0** |
 | `input_number.indoor_response_gain` | 0.5 | 1.5 | 0.1 | **1.5** |
-| `input_number.weather_forecast_trend` | −10 | 10 | 0.1 | *(auto)* |
-| `input_number.weather_forecast_avg_6h` | −30 | 20 | 0.1 | *(auto)* |
+
+> 💡 Since **v4.8** the weather forecast trend is calculated by the blueprint itself from the hourly
+> forecast of the selected weather entity – the helpers `weather_forecast_trend` / `weather_forecast_avg_6h`
+> are no longer needed (the trend helper is only an optional fallback for weather entities without an hourly forecast).
 
 > ⚠️ `indoor_bias = 0.0` ensures the effective target temperature matches the value set in the thermostat. Negative values cause the system to react later.
 
