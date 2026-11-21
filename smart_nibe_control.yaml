@@ -1,5 +1,5 @@
 blueprint:
-  name: Smart NIBE – v4.8
+  name: Smart NIBE – v4.9
   description: |
     Adaptive heat pump offset control for NIBE via MQTT/Modbus.
 
@@ -141,7 +141,18 @@ blueprint:
 
     mqtt_debug_topic:
       name: 🔍 MQTT debug topic
+      description: Full calculation as JSON on every run, including a plain-text "status".
       default: nibe/debug/offset_calc
+      selector:
+        text:
+
+    mqtt_history_topic:
+      name: 📜 MQTT history topic
+      description: >
+        After every write a plain-text line (time, old → new offset, reasons) is published here
+        (retained, last 20 entries). Add the "NIBE Offset History" MQTT sensor from Helpery.md to
+        see the list – the blueprint finds it automatically. Leave empty to disable.
+      default: nibe/debug/history
       selector:
         text:
 
@@ -488,6 +499,45 @@ action:
         {{ not last_write_set or
            minutes_since_write | float >= min_write_interval_min | float }}
 
+  # PLAIN-TEXT STATUS (what is happening and why)
+  - variables:
+      offset_change: "{{ offset_final | int - curr_offset | int }}"
+      # Mirrors the write conditions below – first one that blocks the write
+      block_reason: >-
+        {% if not offset_available %}current offset unavailable
+        {%- elif offset_change | int == 0 %}
+        {%- elif hdo_set and not is_state(hdo_ent, 'on') %}HDO blocking
+        {%- elif states(spot_ent) == 'unavailable' %}spot price unavailable
+        {%- elif offset_change | int | abs < effective_min_change | int %}change below dead band ({{ effective_min_change | int }})
+        {%- elif not (allow_write_by_time or comfort_override) %}write interval {{ minutes_since_write | float | round(0) | int }}/{{ min_write_interval_min | int }} min
+        {%- endif %}
+      will_write: "{{ offset_change | int != 0 and block_reason | trim == '' }}"
+      # Up to 3 strongest components (|value| >= 0.3) as text
+      status_reasons: >-
+        {% set items = [
+          [spot_influence_raw | float, ('cheap' if spot_influence_raw | float > 0 else 'expensive') ~ ' electricity (' ~ (price_now | float | round(2)) ~ ')'],
+          [equi_shift | float, 'outdoor ' ~ (temp_outdoor | float | round(1)) ~ ' °C'],
+          [indoor_correction | float * gain_value | float, 'house ' ~ (temp_diff | float | abs | round(1)) ~ ' °C ' ~ ('below' if temp_diff | float < 0 else 'above') ~ ' target'],
+          [cheap_block_bonus | float, 'cheapest 6h block'],
+          [preheat_bonus | float, 'pre-heating before price rise'],
+          [solar_malus | float, 'solar gain expected'],
+          [forecast_bonus | float, ('colder' if trend_value | float < 0 else 'warmer') ~ ' weather coming (' ~ (trend_value | float | round(1)) ~ ' °C in 6 h)'],
+          [cop_bonus | float, ('high' if cop_bonus | float < 0 else 'low') ~ ' COP (' ~ (cop_value | float | round(1)) ~ ')']
+        ] %}
+        {% set ns = namespace(r=[]) %}
+        {% for i in items %}{% if i[0] | abs >= 0.3 %}{% set ns.r = ns.r + [[i[0] | abs, i[1] ~ ' ' ~ ('%+.1f' | format(i[0]))]] %}{% endif %}{% endfor %}
+        {{ (ns.r | sort(attribute='0', reverse=true) | map(attribute='1') | list)[:3] | join(', ') }}
+      status_text: >-
+        {% set r = status_reasons | trim %}
+        {% set b = block_reason | trim %}
+        {% if not offset_available %}Waiting – current offset unavailable
+        {%- elif offset_change | int == 0 %}Holding at {{ curr_offset | int }}{{ ': ' ~ r if r else '' }}
+        {%- elif b %}Holding at {{ curr_offset | int }} (target {{ offset_final | int }}) – {{ b }}{{ ' · ' ~ r if r else '' }}
+        {%- else %}{{ 'Raising' if offset_change | int > 0 else 'Lowering' }} offset {{ curr_offset | int }} → {{ offset_final | int }}{{ ': ' ~ r if r else '' }}
+        {%- endif %}
+      history_topic: !input mqtt_history_topic
+      history_set: "{{ history_topic not in [none, '', 'none'] }}"
+
   # MQTT DEBUG PUBLISH
   - service: mqtt.publish
     data:
@@ -499,8 +549,9 @@ action:
         {% set cop_influence = cop_bonus | float %}
         {{
           {
+            "status": status_text,
             "metadata": {
-              "version": "4.7",
+              "version": "4.9",
               "timestamp": now().isoformat(),
               "components_count": 8
             },
@@ -589,6 +640,8 @@ action:
               "eeprom_protection": {"minutes_since_write": minutes_since_write | float, "write_allowed": allow_write_by_time or comfort_override, "interval_ok": allow_write_by_time, "comfort_override": comfort_override, "comfort_override_delta": comfort_delta | float}
             },
             "decision": {
+              "will_write": will_write,
+              "blocked_by": block_reason | trim,
               "write_method": write_method,
               "checks": {
                 "sensors_available": states(spot_ent) != 'unavailable' and states(weather_ent) != 'unavailable',
@@ -599,14 +652,6 @@ action:
           } | tojson
         }}
       retain: true
-
-  - service: logbook.log
-    data:
-      name: "NIBE v4.7"
-      message: >
-        Offset={{ offset_final | int }} ({{ offset_final | int - curr_offset | int }}),
-        raw={{ raw_calc | round(2) }}, COP={{ cop_value | round(2) }}, 8 components
-      entity_id: "{{ spot_ent }}"
 
   - condition: template
     value_template: "{{ not hdo_set or is_state(hdo_ent, 'on') }}"
@@ -644,5 +689,28 @@ action:
             data:
               entity_id: "{{ last_write_ent }}"
               timestamp: "{{ now_timestamp }}"
+
+  # HISTORY – logbook entry on the offset entity + retained MQTT list (last 20)
+  - variables:
+      history_entry: >-
+        {{ now().strftime('%d.%m. %H:%M') }} offset {{ curr_offset | int }} → {{ offset_final | int }}{{ ': ' ~ (status_reasons | trim) if status_reasons | trim else '' }}
+  - service: logbook.log
+    data:
+      name: "Smart NIBE"
+      message: "{{ history_entry }}"
+      entity_id: "{{ curr_off_ent }}"
+  - if:
+      - condition: template
+        value_template: "{{ history_set }}"
+    then:
+      - service: mqtt.publish
+        data:
+          topic: "{{ history_topic }}"
+          retain: true
+          payload: >-
+            {% set hs = states.sensor | selectattr('attributes.history_topic', 'defined')
+                 | selectattr('attributes.history_topic', 'eq', history_topic) | list %}
+            {% set old = hs[0].attributes.entries if hs and hs[0].attributes.entries is iterable and hs[0].attributes.entries is not string and hs[0].attributes.entries is not mapping else [] %}
+            {{ {"history_topic": history_topic, "last": history_entry, "entries": ([history_entry] + old)[:20]} | tojson }}
 
 mode: single

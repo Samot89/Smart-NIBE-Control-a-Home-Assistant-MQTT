@@ -6,6 +6,24 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [v4.9] – 2026-11-21
+
+### Added
+- **Plain-text status** in the debug payload (`status`): what the blueprint is doing and why –
+  direction (raising / lowering / holding), what blocks a write (HDO, dead band, write interval,
+  unavailable offset) and the up to 3 strongest components. New MQTT sensor *NIBE Status*. (#9)
+- **Offset history**: after every write a line (time, old → new offset, reasons) is published to
+  `mqtt_history_topic` (default `nibe/debug/history`, retained, last 20 entries) and logged to the
+  logbook of the *Current NIBE offset* entity. New MQTT sensor *NIBE Offset History* and a
+  markdown card example in Helpery.md. (#7)
+- MQTT debug: `decision.will_write`, `decision.blocked_by`.
+
+### Changed
+- The logbook entry is written only when the offset is actually written (previously every run,
+  i.e. every 2 minutes).
+
+---
+
 ## [v4.8] – 2026-11-20
 
 ### Changed

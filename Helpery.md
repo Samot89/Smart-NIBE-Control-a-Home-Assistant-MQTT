@@ -153,6 +153,32 @@ it must be kept up to date by an automation (example:
 
 ---
 
+### 🔹 Status text and history (v4.9)
+
+Every run the blueprint publishes a plain-text **status** – what it is doing and why, e.g.
+*"Raising offset 0 → 1: house 0.4 °C below target +1.0, cheap electricity (2.0) +0.9"* or
+*"Holding at 0 (target 1) – write interval 23/45 min · …"*.
+
+After every write it adds a line to the **history** (`nibe/debug/history`, retained, last 20
+entries) and to the logbook of the *Current NIBE offset* entity. The blueprint finds the history
+sensor below by its `history_topic` attribute – no need to select it anywhere.
+
+Add both MQTT sensors (see `mqtt.yaml` below: *NIBE Status*, *NIBE Offset History*) and show them
+on a dashboard, e.g.:
+
+```yaml
+type: markdown
+title: Smart NIBE
+content: >
+  **{{ states('sensor.nibe_status') }}**
+
+  {% for e in state_attr('sensor.nibe_offset_history', 'entries') or [] %}
+  - {{ e }}
+  {% endfor %}
+```
+
+---
+
 ### 🔹 Optional: HDO / grid blocking
 
 `binary_sensor.hdo`
@@ -208,6 +234,19 @@ mqtt:
       icon: mdi:thermometer-lines
       json_attributes_topic: "nibe/debug/offset_calc"
       json_attributes_template: "{{ value_json | tojson }}"
+
+    - name: NIBE Status
+      unique_id: nibe_status
+      state_topic: "nibe/debug/offset_calc"
+      value_template: "{{ (value_json.status | default(''))[:255] }}"
+      icon: mdi:message-text
+
+    - name: NIBE Offset History
+      unique_id: nibe_offset_history
+      state_topic: "nibe/debug/history"
+      value_template: "{{ (value_json.last | default(''))[:255] }}"
+      json_attributes_topic: "nibe/debug/history"
+      icon: mdi:history
 
     - name: NIBE Final Offset
       unique_id: nibe_offset_final

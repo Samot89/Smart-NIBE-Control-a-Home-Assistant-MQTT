@@ -1,6 +1,6 @@
 # 🏠 Smart NIBE Control – Adaptive Heat Pump Control
 
-[![Version](https://img.shields.io/badge/version-v4.8-blue)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-v4.9-blue)](CHANGELOG.md)
 [![Platform](https://img.shields.io/badge/Home%20Assistant-Blueprint-41BDF5?logo=homeassistant)](https://www.home-assistant.io/)
 [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
@@ -134,6 +134,9 @@ Import ready-made cards from [DASHBOARD.md](DASHBOARD.md).
 ---
 
 ## 📊 MQTT sensors (debug)
+
+Since v4.9 every run also publishes a plain-text **status** (what it is doing and why) and every
+write is added to an **offset history** – see *Status text and history* in [Helpery.md](Helpery.md).
 
 The blueprint automatically publishes diagnostics:
 
