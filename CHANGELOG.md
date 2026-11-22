@@ -6,6 +6,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [v4.9.2] – 2026-11-22
+
+### Changed
+- Repository renamed to **Smart-NIBE-Control-HA-Modbus-MQTT-myUplink** (old links redirect).
+- Blueprint renamed to *Smart NIBE – Adaptive Heat Curve Control (MQTT/Modbus or myUplink)* with
+  an up-to-date description (it still showed the v4.4 notes).
+- README: both write methods (MQTT/Modbus and NIBE/myUplink) described up front; MQTT broker is
+  optional with myUplink.
+
+### Fixed
+- Without an MQTT integration (myUplink-only setups) the debug publish failed and stopped the
+  automation before the offset was written. Debug and history publishes now continue on error.
+
+---
+
 ## [v4.9.1] – 2026-11-22
 
 ### Fixed

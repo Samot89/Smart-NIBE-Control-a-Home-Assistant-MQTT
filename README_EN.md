@@ -1,7 +1,7 @@
 # 🌡️ Smart NIBE Control – Home Assistant Blueprint
 
 An **adaptive, high-level control system** for NIBE heat pumps using
-**Home Assistant** and **MQTT**.
+**Home Assistant** – via **MQTT / Modbus (NibePi)** or the **NIBE / myUplink integration**.
 
 This project dynamically adjusts the **heat curve offset (Modbus register 47011)**
 based on electricity spot prices, weather conditions, indoor comfort, and
@@ -9,7 +9,7 @@ heat pump protection — **without switching the compressor on/off**.
 
 Think of it as a *brain*, not a switch.
 
-[![Import Blueprint](https://my.home-assistant.io/badges/blueprint_import.svg)](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https://raw.githubusercontent.com/Samot89/Smart-NIBE-Control-a-Home-Assistant-MQTT/main/smart_nibe_control.yaml)
+[![Import Blueprint](https://my.home-assistant.io/badges/blueprint_import.svg)](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https://raw.githubusercontent.com/Samot89/Smart-NIBE-Control-HA-Modbus-MQTT-myUplink/main/smart_nibe_control.yaml)
 
 ---
 
@@ -25,7 +25,7 @@ Think of it as a *brain*, not a switch.
 - **Smooth ramping (slew rate limiting)** to protect the compressor
 - **Configurable spot price formula** (slope + intercept)
 - Optional **HDO / grid signal support**
-- Communication via **MQTT / nibepi**
+- Communication via **MQTT / nibepi** or the **NIBE / myUplink integration**
 - Full transparency via **debug MQTT logs**
 
 > 🚿 **Hot water:** the optional **VV-AI** pyscript learns your hot water usage and

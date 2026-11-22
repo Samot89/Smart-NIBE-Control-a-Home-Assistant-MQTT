@@ -325,7 +325,7 @@ cards:
 
 ## 🔗 References
 
-- **GitHub:** https://github.com/Samot89/Smart-NIBE-Control-a-Home-Assistant-MQTT.git
+- **GitHub:** https://github.com/Samot89/Smart-NIBE-Control-HA-Modbus-MQTT-myUplink.git
 - **Blueprint:** https://community.home-assistant.io/t/smart-nibe-ultra-adaptive-heat-curve-control-mqtt-spot-prices/975863
 
 ---

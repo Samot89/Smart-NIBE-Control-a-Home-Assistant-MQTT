@@ -1,10 +1,14 @@
-# 🏠 Smart NIBE Control – Adaptive Heat Pump Control
+# 🏠 Smart NIBE Control – Adaptive Heat Pump Control (MQTT/Modbus or myUplink)
 
 [![Version](https://img.shields.io/badge/version-v4.9-blue)](CHANGELOG.md)
 [![Platform](https://img.shields.io/badge/Home%20Assistant-Blueprint-41BDF5?logo=homeassistant)](https://www.home-assistant.io/)
 [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
 An intelligent Home Assistant blueprint that adaptively controls a NIBE heat pump by adjusting the equithermal curve (Modbus register 47011). The system **does not toggle the compressor** — it smoothly optimizes thermal output based on 8 independent factors.
+
+**Two ways to write the offset – pick one in the blueprint:**
+- **MQTT / Modbus** – [NibePi](https://github.com/anerdins/nibepi) or any Modbus–MQTT bridge (default)
+- **NIBE / myUplink integration** – the offset `number` entity is set directly, no NibePi or MQTT broker needed
 
 ---
 
@@ -68,8 +72,10 @@ Correction is non-linear (±0.3, ±0.7, ±1.5) and multiplied by `indoor_respons
 
 - **NIBE heat pump** (S-series, F-series with VVM 320/500)
 - **Home Assistant** 2024.1+
-- **MQTT broker** (Mosquitto)
-- **nibepi bridge** or equivalent for Modbus–MQTT – or the NIBE / myUplink integration (offset written directly to its `number` entity, see *How to write the offset*)
+- **One of:**
+  - **NibePi bridge** or equivalent Modbus–MQTT bridge + **MQTT broker** (Mosquitto), or
+  - the **NIBE / myUplink integration** (offset written directly to its `number` entity – choose *How to write the offset → entity*)
+- **MQTT broker** is optional with myUplink – it is only used for the debug payload, status text and history
 - **Spot prices** – integration e.g. Nordpool / Amber Electric
 - **Outdoor temperature** – sensor or weather integration
 - **Indoor temperature** – sensor in the living space
@@ -80,7 +86,7 @@ Correction is non-linear (±0.3, ±0.7, ±1.5) and multiplied by `indoor_respons
 
 ### 1. Import the blueprint
 
-[![Import Blueprint](https://my.home-assistant.io/badges/blueprint_import.svg)](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https://github.com/Samot89/Smart-NIBE-Control-a-Home-Assistant-MQTT/blob/main/smart_nibe_control.yaml)
+[![Import Blueprint](https://my.home-assistant.io/badges/blueprint_import.svg)](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https://github.com/Samot89/Smart-NIBE-Control-HA-Modbus-MQTT-myUplink/blob/main/smart_nibe_control.yaml)
 
 Click the button above, or import it manually:
 ```
@@ -88,9 +94,9 @@ Settings → Automations → Blueprints → Import Blueprint
 ```
 and paste the URL of the **blueprint file** (not of the repository):
 ```
-https://github.com/Samot89/Smart-NIBE-Control-a-Home-Assistant-MQTT/blob/main/smart_nibe_control.yaml
+https://github.com/Samot89/Smart-NIBE-Control-HA-Modbus-MQTT-myUplink/blob/main/smart_nibe_control.yaml
 ```
-> ⚠️ The repository URL (`https://github.com/Samot89/Smart-NIBE-Control-a-Home-Assistant-MQTT` or `.git`) does not work – Home Assistant downloads the GitHub web page instead of the YAML and fails with `mapping values are not allowed here ... --tab-size-preference: 4;`.
+> ⚠️ The repository URL (`https://github.com/Samot89/Smart-NIBE-Control-HA-Modbus-MQTT-myUplink` or `.git`) does not work – Home Assistant downloads the GitHub web page instead of the YAML and fails with `mapping values are not allowed here ... --tab-size-preference: 4;`.
 
 Alternatively copy `smart_nibe_control.yaml` to `/config/blueprints/automation/` and reload automations.
 

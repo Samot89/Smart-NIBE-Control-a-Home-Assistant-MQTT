@@ -1,24 +1,23 @@
 blueprint:
-  name: Smart NIBE – v4.9.1
+  name: Smart NIBE – Adaptive Heat Curve Control (MQTT/Modbus or myUplink) v4.9.2
   description: |
-    Adaptive heat pump offset control for NIBE via MQTT/Modbus.
+    Adaptive control of a NIBE heat pump: smoothly adjusts the heat curve offset
+    (register 47011) – never switches the compressor on/off.
 
-    **v4.4 – Changes:**
-    - ⚡ Spot price influence reduced 3× (coefficient −0.3, offset +1.5)
-    - Indoor temperature now dominates control
-    - Recommended: indoor_bias = 0.0, indoor_response_gain = 1.5
+    **Works with** NibePi / any Modbus–MQTT bridge (MQTT write) **or** the NIBE /
+    myUplink integration (writes the `number` entity directly) – see *How to write the offset*.
 
-    **v4.3 – Features:**
-    - 🔋 COP bonus – optimization based on heat pump efficiency
-    - ✅ 8 calculation components
-    - 📊 Detailed MQTT debug
+    **8 components:** spot price, equithermal shift, indoor temperature, cheapest block,
+    pre-heating before price rise, solar braking, weather forecast trend, COP.
 
-    **COP thresholds calibrated for NIBE ground-source (range 4–7+):**
-    - >7.0 → -0.8 | >6.5 → -0.5 | >6.0 → -0.3
-    - 5.0–6.0 → neutral
-    - <5.0 → +0.5 | <4.0 → +0.8 (frost)
+    **Protection:** dead band, step limit, degree minutes guard, minimum write interval
+    (EEPROM), HDO blocking.
+
+    **Transparency:** plain-text status and write history via MQTT (optional) – see Helpery.md.
+
+    Docs, helpers and changelog: https://github.com/Samot89/Smart-NIBE-Control-HA-Modbus-MQTT-myUplink
   domain: automation
-  source_url: https://github.com/Samot89/Smart-NIBE-Control-a-Home-Assistant-MQTT/blob/main/smart_nibe_control.yaml
+  source_url: https://github.com/Samot89/Smart-NIBE-Control-HA-Modbus-MQTT-myUplink/blob/main/smart_nibe_control.yaml
   input:
     # ==========================================
     # BASIC SENSORS
@@ -555,8 +554,9 @@ action:
         {%- else %}{{ 'Raising' if offset_change | int > 0 else 'Lowering' }} offset {{ curr_offset | int }} → {{ offset_final | int }}{{ ': ' ~ r if r else '' }}
         {%- endif %}
 
-  # MQTT DEBUG PUBLISH
+  # MQTT DEBUG PUBLISH (optional – ignored when MQTT is not set up, e.g. myUplink-only)
   - service: mqtt.publish
+    continue_on_error: true
     data:
       topic: !input mqtt_debug_topic
       payload: >
@@ -568,7 +568,7 @@ action:
           {
             "status": status_text,
             "metadata": {
-              "version": "4.9.1",
+              "version": "4.9.2",
               "timestamp": now().isoformat(),
               "components_count": 8
             },
@@ -724,6 +724,7 @@ action:
         value_template: "{{ history_set }}"
     then:
       - service: mqtt.publish
+        continue_on_error: true
         data:
           topic: "{{ history_topic }}"
           retain: true

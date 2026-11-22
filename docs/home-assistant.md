@@ -23,8 +23,7 @@ integrace spot: https://github.com/rnovacek/homeassistant_cz_energy_spot_prices
 
 ### Počasí
 - weather.domov_2 -Počasí v HA
-- input_number.weather_forecast_avg_6h - Helper
-- input_number.weather_forecast_trend - Helper
+- trend předpovědi počítá blueprint sám z hodinové předpovědi (od v4.8), helpery nejsou potřeba
 - integrace počasí: https://www.home-assistant.io/integrations/open_meteo/
 
 ### Komfort
@@ -41,4 +40,4 @@ integrace spot: https://github.com/rnovacek/homeassistant_cz_energy_spot_prices
 Automatizace:
 - běží 1× za hodinu
 - počítá offset
-- zapisuje přes MQTT
+- zapisuje přes MQTT (NibePi) nebo přímo do `number` entity integrace NIBE / myUplink
