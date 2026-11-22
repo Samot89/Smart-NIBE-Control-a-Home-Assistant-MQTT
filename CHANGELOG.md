@@ -6,6 +6,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [v4.10] – 2026-11-22
+
+### Added
+- **Actions after a write** (optional, #10): run any notify service, Telegram message or script
+  after every offset write. Choose the message (short line, full status or both) and use
+  `{{ nibe_message }}`, `{{ nibe_status }}`, `{{ nibe_history_line }}`, `{{ nibe_offset_old }}`,
+  `{{ nibe_offset_new }}` and `{{ nibe_reasons }}` in your actions.
+
+### Fixed
+- Helpery.md: the history dashboard card used `content: >`, which folded all rows into one line.
+  Now `content: |` (#9).
+
+---
+
 ## [v4.9.2] – 2026-11-22
 
 ### Changed

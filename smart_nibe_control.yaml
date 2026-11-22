@@ -1,5 +1,5 @@
 blueprint:
-  name: Smart NIBE – Adaptive Heat Curve Control (MQTT/Modbus or myUplink) v4.9.2
+  name: Smart NIBE – Adaptive Heat Curve Control (MQTT/Modbus or myUplink) v4.10
   description: |
     Adaptive control of a NIBE heat pump: smoothly adjusts the heat curve offset
     (register 47011) – never switches the compressor on/off.
@@ -14,6 +14,7 @@ blueprint:
     (EEPROM), HDO blocking.
 
     **Transparency:** plain-text status and write history via MQTT (optional) – see Helpery.md.
+    Optional notification / script after every write (*Actions after a write*).
 
     Docs, helpers and changelog: https://github.com/Samot89/Smart-NIBE-Control-HA-Modbus-MQTT-myUplink
   domain: automation
@@ -250,6 +251,36 @@ blueprint:
       default: "/2"
       selector:
         text:
+
+    # ==========================================
+    # NOTIFICATIONS
+    # ==========================================
+
+    notify_message_type:
+      name: 💬 Message for the actions below
+      description: >
+        Which text is offered as `{{ nibe_message }}` to the actions after a write.
+      default: history
+      selector:
+        select:
+          options:
+            - label: "Short – time, old → new offset, main reasons"
+              value: history
+            - label: "Full status text"
+              value: status
+            - label: "Both (short line + full status)"
+              value: both
+
+    on_write_actions:
+      name: 🔔 Actions after a write (optional)
+      description: >
+        Runs after every offset write – e.g. a notify service, a Telegram message or your own
+        script. Available variables: `{{ nibe_message }}` (selected above), `{{ nibe_status }}`
+        (full status text), `{{ nibe_history_line }}` (short line), `{{ nibe_offset_old }}`,
+        `{{ nibe_offset_new }}`, `{{ nibe_reasons }}`. Example message: `{{ nibe_message }}`.
+      default: []
+      selector:
+        action: {}
 
 trigger:
   - platform: time_pattern
@@ -568,7 +599,7 @@ action:
           {
             "status": status_text,
             "metadata": {
-              "version": "4.9.2",
+              "version": "4.10",
               "timestamp": now().isoformat(),
               "components_count": 8
             },
@@ -733,5 +764,19 @@ action:
             {% set old = e if e is iterable and e is not string and e is not mapping else [] %}
             {{ {"history_topic": history_topic, "last": history_entry, "last_offset": offset_final | int,
                 "last_write": now().isoformat(), "entries": ([history_entry] + old)[:20]} | tojson }}
+
+  # NOTIFICATIONS – user actions after a write (optional, last step)
+  - variables:
+      notify_type: !input notify_message_type
+      nibe_history_line: "{{ history_entry }}"
+      nibe_status: "{{ status_text | trim }}"
+      nibe_offset_old: "{{ curr_offset | int }}"
+      nibe_offset_new: "{{ offset_final | int }}"
+      nibe_reasons: "{{ status_reasons | trim }}"
+      nibe_message: |-
+        {% if notify_type == 'status' %}{{ status_text | trim }}{% elif notify_type == 'both' %}{{ history_entry }}
+        {{ status_text | trim }}{% else %}{{ history_entry }}{% endif %}
+  - choose: []
+    default: !input on_write_actions
 
 mode: single

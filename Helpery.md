@@ -169,13 +169,29 @@ on a dashboard, e.g.:
 ```yaml
 type: markdown
 title: Smart NIBE
-content: >
+content: |
   **{{ states('sensor.nibe_status') }}**
 
-  {% for e in state_attr('sensor.nibe_offset_history', 'entries') or [] %}
+  {% for e in state_attr('sensor.nibe_offset_history', 'entries') or [] -%}
   - {{ e }}
   {% endfor %}
 ```
+
+> Use `content: |` (not `>`) – otherwise YAML folds all history rows into one line.
+
+**Notification after a write (v4.10):** in the blueprint open *🔔 Actions after a write*, add e.g.
+a *Notifications* action and use `{{ nibe_message }}` as the message. In YAML:
+
+```yaml
+- action: notify.mobile_app_my_phone
+  data:
+    title: Smart NIBE
+    message: "{{ nibe_message }}"
+```
+
+Available variables: `nibe_message` (short line / full status / both – chosen in
+*💬 Message for the actions below*), `nibe_status`, `nibe_history_line`, `nibe_offset_old`,
+`nibe_offset_new`, `nibe_reasons`.
 
 ---
 
