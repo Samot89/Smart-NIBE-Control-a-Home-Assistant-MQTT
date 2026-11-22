@@ -6,6 +6,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [v4.9.1] – 2026-11-22
+
+### Fixed
+- With cloud integrations (myUplink) the new offset shows up with a delay. Right after a write the
+  status said *"Holding at -2 (target -3)"* although -3 had already been written. For 15 minutes
+  after a write the blueprint now recognises the offset as "not confirmed yet": the status says
+  *"Offset -3 written 2 min ago – waiting for NIBE to report it"* and the same value is not
+  written again. Uses the history sensor (needs `mqtt_history_topic` + the *NIBE Offset History*
+  sensor). (#9)
+- MQTT debug: `decision.write_pending`; the history payload stores `last_offset` and `last_write`.
+
+---
+
 ## [v4.9] – 2026-11-21
 
 ### Added

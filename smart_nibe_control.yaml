@@ -1,5 +1,5 @@
 blueprint:
-  name: Smart NIBE – v4.9
+  name: Smart NIBE – v4.9.1
   description: |
     Adaptive heat pump offset control for NIBE via MQTT/Modbus.
 
@@ -502,9 +502,27 @@ action:
   # PLAIN-TEXT STATUS (what is happening and why)
   - variables:
       offset_change: "{{ offset_final | int - curr_offset | int }}"
+      history_topic: !input mqtt_history_topic
+      history_set: "{{ history_topic not in [none, '', 'none'] }}"
+      # History sensor (found by its history_topic attribute) remembers the last written offset
+      history_ent: >-
+        {{ states.sensor | selectattr('attributes.history_topic', 'defined')
+           | selectattr('attributes.history_topic', 'eq', history_topic)
+           | map(attribute='entity_id') | first | default('') if history_set else '' }}
+      last_written_offset: "{{ state_attr(history_ent, 'last_offset') if history_ent else none }}"
+      minutes_since_hist_write: >-
+        {{ ((now_timestamp | float - as_timestamp(state_attr(history_ent, 'last_write'), 0)) / 60) | round(0)
+           if history_ent else 9999 }}
+      # Cloud integrations (myUplink) report the new offset with a delay – for 15 min after a
+      # write, treat a differing current offset as "not confirmed yet" instead of re-writing.
+      write_pending: >-
+        {{ last_written_offset is number and minutes_since_hist_write | float < 15
+           and curr_offset | int != last_written_offset | int
+           and offset_final | int == last_written_offset | int }}
       # Mirrors the write conditions below – first one that blocks the write
       block_reason: >-
         {% if not offset_available %}current offset unavailable
+        {%- elif write_pending %}waiting for NIBE to confirm {{ last_written_offset | int }} (written {{ minutes_since_hist_write | int }} min ago)
         {%- elif offset_change | int == 0 %}
         {%- elif hdo_set and not is_state(hdo_ent, 'on') %}HDO blocking
         {%- elif states(spot_ent) == 'unavailable' %}spot price unavailable
@@ -531,12 +549,11 @@ action:
         {% set r = status_reasons | trim %}
         {% set b = block_reason | trim %}
         {% if not offset_available %}Waiting – current offset unavailable
+        {%- elif write_pending %}Offset {{ last_written_offset | int }} written {{ minutes_since_hist_write | int }} min ago – waiting for NIBE to report it (still shows {{ curr_offset | int }})
         {%- elif offset_change | int == 0 %}Holding at {{ curr_offset | int }}{{ ': ' ~ r if r else '' }}
         {%- elif b %}Holding at {{ curr_offset | int }} (target {{ offset_final | int }}) – {{ b }}{{ ' · ' ~ r if r else '' }}
         {%- else %}{{ 'Raising' if offset_change | int > 0 else 'Lowering' }} offset {{ curr_offset | int }} → {{ offset_final | int }}{{ ': ' ~ r if r else '' }}
         {%- endif %}
-      history_topic: !input mqtt_history_topic
-      history_set: "{{ history_topic not in [none, '', 'none'] }}"
 
   # MQTT DEBUG PUBLISH
   - service: mqtt.publish
@@ -551,7 +568,7 @@ action:
           {
             "status": status_text,
             "metadata": {
-              "version": "4.9",
+              "version": "4.9.1",
               "timestamp": now().isoformat(),
               "components_count": 8
             },
@@ -641,6 +658,7 @@ action:
             },
             "decision": {
               "will_write": will_write,
+              "write_pending": write_pending,
               "blocked_by": block_reason | trim,
               "write_method": write_method,
               "checks": {
@@ -663,6 +681,8 @@ action:
     value_template: "{{ (curr_offset | int - offset_final | int) | abs >= effective_min_change | int }}"
   - condition: template
     value_template: "{{ allow_write_by_time or comfort_override }}"
+  - condition: template
+    value_template: "{{ not write_pending }}"
 
   - choose:
       - conditions:
@@ -708,9 +728,9 @@ action:
           topic: "{{ history_topic }}"
           retain: true
           payload: >-
-            {% set hs = states.sensor | selectattr('attributes.history_topic', 'defined')
-                 | selectattr('attributes.history_topic', 'eq', history_topic) | list %}
-            {% set old = hs[0].attributes.entries if hs and hs[0].attributes.entries is iterable and hs[0].attributes.entries is not string and hs[0].attributes.entries is not mapping else [] %}
-            {{ {"history_topic": history_topic, "last": history_entry, "entries": ([history_entry] + old)[:20]} | tojson }}
+            {% set e = state_attr(history_ent, 'entries') if history_ent else none %}
+            {% set old = e if e is iterable and e is not string and e is not mapping else [] %}
+            {{ {"history_topic": history_topic, "last": history_entry, "last_offset": offset_final | int,
+                "last_write": now().isoformat(), "entries": ([history_entry] + old)[:20]} | tojson }}
 
 mode: single
