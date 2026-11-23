@@ -31,7 +31,8 @@ An optional pyscript that learns when hot water is used (weekly profile from the
 temperature drop) and switches the hot water comfort mode (register 47041:
 Economy / Normal / Luxury) based on that profile, the electricity price and PV surplus,
 with BT6/BT7 safety floors. It runs next to the blueprint: the blueprint controls
-heating (47011), VV-AI controls hot water (47041).
+heating (47011), VV-AI controls hot water (47041). Writes via MQTT (NibePi) **or** the
+NIBE / myUplink integration entity – no MQTT broker needed.
 
 ➡️ Description and installation (Czech): [docs/vv-ai.md](docs/vv-ai.md) · files in [`vv_ai/`](vv_ai/)
 

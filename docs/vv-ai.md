@@ -8,7 +8,9 @@ Doplňuje blueprint Smart NIBE Control: ten řídí topení přes posun křivky
 (47011), VV-AI řídí jen teplou vodu (47041). Můžou běžet současně.
 
 Běží jako [pyscript](https://github.com/custom-components/pyscript) v Home
-Assistantu, s čerpadlem komunikuje přes MQTT (nibepi nebo jiný Modbus ↔ MQTT bridge).
+Assistantu. Režim zapisuje **přes MQTT** (nibepi nebo jiný Modbus ↔ MQTT bridge)
+**nebo přímo do entity** integrace NIBE / myUplink či NIBE Heat Pump – viz
+[Zápis přes myUplink / NIBE integraci](#-zápis-přes-myuplink--nibe-integraci).
 
 ---
 
@@ -50,9 +52,10 @@ měnou (EUR, SEK…) je upravte, jinak bude VV-AI skoro pořád v Normal/Luxury.
 ## 📋 Požadavky
 
 - **NIBE** s registry BT6 (40014), BT7 (40013) a zápisem do **47041** (ověřeno na VVM 320)
-- **nibepi** nebo jiný bridge publikující registry do MQTT – zápis režimu jde přes MQTT,
-  **s integrací NIBE / myUplink VV-AI zatím nefunguje**
-- **Home Assistant** + MQTT integrace
+- **nibepi** / Modbus ↔ MQTT bridge **nebo** integrace **NIBE / myUplink** či **NIBE Heat Pump**
+  (entita pro komfortní režim TUV a senzory BT6 / BT7)
+- **Home Assistant**; MQTT integrace je potřeba jen pro zápis přes MQTT nebo pro ukládání
+  přes MQTT (`USE_MQTT = True`, výchozí)
 - **pyscript** (HACS → Integrace → *Pyscript Python scripting*)
 - senzor **ceny elektřiny** za kWh, např. [CZ Energy Spot Prices](https://github.com/rnovacek/homeassistant_cz_energy_spot_prices)
 - volitelně senzor **přetoků FVE** do sítě (W)
@@ -87,9 +90,13 @@ a na začátku souboru upravte entity:
 | `BT7_ENTITY` | BT7 – horní část zásobníku TUV | `sensor.nibe_bt7_hw_top` |
 | `SPOT_ENTITY` | aktuální cena za kWh | `sensor.current_buy_electricity_price_15min` |
 | `SOLAR_ENTITY` | průměrné FVE přetoky (W) | `sensor.pretoky_klouzavy_prumer_15min` |
-| `HW_TOPIC` | MQTT topic pro zápis 47041 | `nibe/modbus/47041/set` (nibepi) |
+| `HW_WRITE` | jak zapisovat režim: `"mqtt"` nebo `"entity"` | `"mqtt"` |
+| `HW_TOPIC` | MQTT topic pro zápis 47041 (jen `"mqtt"`) | `nibe/modbus/47041/set` (nibepi) |
+| `HW_ENTITY` | entita režimu TUV (jen `"entity"`) | `select.hot_water_comfort_mode` |
+| `HW_OPTIONS` | názvy možností selectu pro Economy / Normal / Luxury | `["economy", "normal", "luxury"]` |
+| `USE_MQTT` | ukládat profil a stav přes MQTT (`False` = bez MQTT) | `True` |
 
-### 3. MQTT senzory
+### 3. MQTT senzory (jen s `USE_MQTT = True`)
 Zkopírujte [`vv_ai/vv_ai_package.yaml`](../vv_ai/vv_ai_package.yaml) do
 `/config/packages/vv_ai.yaml` (balíčky musí být zapnuté v `configuration.yaml`)
 a nahraďte `sensor.grid_export_power` svým senzorem přetoků.
@@ -99,6 +106,35 @@ Bez FVE sekci `sensor:` smažte.
 Restartujte Home Assistant. V logu (`Nastavení → Systém → Protokoly`, filtr
 `VV-AI`) se do hodiny objeví první `VV-AI: profil ulozen` a do 15 minut
 `VV-AI: -> Normal (...)`.
+
+---
+
+## 🔌 Zápis přes myUplink / NIBE integraci
+
+Bez nibepi a MQTT: VV-AI nastaví entitu komfortního režimu TUV přímo v HA.
+
+```python
+HW_WRITE   = "entity"
+HW_ENTITY  = "select.hot_water_comfort_mode"   # vaše entita
+HW_OPTIONS = ["economy", "normal", "luxury"]   # možnosti pro 0 / 1 / 2
+USE_MQTT   = False                             # nemáte-li MQTT broker
+```
+
+- **select** – VV-AI vybere možnost z `HW_OPTIONS` (velikost písmen nevadí). Přesné názvy
+  možností najdete v *Vývojářské nástroje → Stavy* u entity, atribut `options`. U některých
+  modelů (S-série) se režim jmenuje jinak, např. `small` / `medium` / `large`.
+- **number / input_number** – VV-AI nastaví hodnotu 0 / 1 / 2.
+- `BT6_ENTITY` / `BT7_ENTITY` nastavte na senzory teploty TUV z integrace
+  (BT6 = nabíjení / spodní část, BT7 = horní část zásobníku).
+- Zapisuje se jen při změně režimu – a když už entita požadovaný režim má, nic se neposílá.
+- Pokud zápis selže (např. špatný název možnosti), důvod je vidět ve stavu VV-AI
+  (`ZAPIS SELHAL: …`) a v logu.
+- ⚠️ Zápis nastavení přes cloud **myUplink** může vyžadovat předplatné *myUplink Premium*.
+
+S `USE_MQTT = False` se balíček `vv_ai_package.yaml` neinstaluje (kromě volitelného senzoru
+přetoků) a místo MQTT senzorů vzniknou entity `pyscript.vv_ai_rozhodnuti`,
+`pyscript.vv_ai_diagnostika` a `pyscript.vv_ai_profil` (přežijí restart HA). V kartě níže
+pak použijte tyto názvy.
 
 ---
 

@@ -17,9 +17,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   was not part of the look-ahead. Now stored in the hour it started; look-ahead = this + next 2 h.
   Already learned profiles shift by one hour – they re-learn within a week or two.
 
+### Added (VV-AI pyscript)
+- **Works with the NIBE / myUplink integration too:** `HW_WRITE = "entity"` sets the hot water
+  comfort mode entity directly – `select` (option names in `HW_OPTIONS`, e.g. economy / normal /
+  luxury or small / medium / large) or `number` / `input_number` (0 / 1 / 2). Nothing is sent when
+  the entity already has the mode. A failed write shows in the status (`ZAPIS SELHAL: …`).
+- **No MQTT broker needed:** `USE_MQTT = False` stores the profile, status and diagnostics in
+  persistent `pyscript.vv_ai_*` entities instead of retained MQTT messages.
+
 ### Docs
-- `docs/vv-ai.md`: price thresholds are in CZK by default (adjust for EUR/SEK); VV-AI writes via
-  MQTT and does not work with the NIBE / myUplink integration yet.
+- `docs/vv-ai.md`: new section *Zápis přes myUplink / NIBE integraci*; price thresholds are in
+  CZK by default (adjust for EUR/SEK).
 
 ---
 

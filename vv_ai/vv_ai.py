@@ -11,16 +11,21 @@ Rozhodovani (v tomto poradi):
   3. BT6 < BT6_MIN             -> Normal (studena nadrz)
   4. FVE pretok >= SOLAR_VERY_CHEAP -> Luxury
      FVE pretok >= SOLAR_CHEAP      -> aspon Normal
-  5. cena + naucena spotreba v pristich PREHEAT_H hodinach
+  5. cena + naucena spotreba v teto a pristich PREHEAT_H hodinach
 
-Profil se uklada jako retained MQTT zprava (STORE_TOPIC) a cte zpet pres
-MQTT senzor STORE_ENTITY (viz vv_ai_package.yaml) — pyscript nemuze
-zapisovat soubory.
+Zapis rezimu (HW_WRITE):
+  "mqtt"   – 0/1/2 na HW_TOPIC (nibepi / Modbus–MQTT bridge)
+  "entity" – nastavi entitu HW_ENTITY (integrace NIBE / myUplink nebo NIBE Heat Pump):
+             select -> moznost z HW_OPTIONS, number / input_number -> 0/1/2
+
+Ukladani profilu a stavu (USE_MQTT):
+  True  – retained MQTT zpravy + MQTT senzory z vv_ai_package.yaml
+  False – bez MQTT: entity pyscript.vv_ai_rozhodnuti / _diagnostika / _profil
+          (state.persist – preziji restart HA)
+Pyscript nemuze zapisovat soubory.
 
 Umisteni: /config/pyscript/vv_ai.py
 Pozor: pyscript nepodporuje generator expressions — pouzivat list comprehension.
-Diag publish je primo v trigger funkci — service.call z pomocnych funkci
-mimo trigger neni v pyscript spolehlivy.
 """
 
 import json
@@ -32,13 +37,21 @@ BT7_ENTITY      = "sensor.nibe_bt7_hw_top"                      # BT7, horni cas
 SPOT_ENTITY     = "sensor.current_buy_electricity_price_15min"  # aktualni cena za kWh
 SOLAR_ENTITY    = "sensor.pretoky_klouzavy_prumer_15min"        # prumerne FVE pretoky ve W (nepovinne)
 
-# --- Nastaveni: MQTT ----------------------------------------------------------
-HW_TOPIC        = "nibe/modbus/47041/set"    # zapis rezimu TUV (nibepi); jiny bridge = jiny topic
+# --- Nastaveni: zapis rezimu TUV ---------------------------------------------
+HW_WRITE        = "mqtt"                     # "mqtt" (nibepi) nebo "entity" (myUplink / NIBE integrace)
+HW_TOPIC        = "nibe/modbus/47041/set"    # jen pro "mqtt"; jiny bridge = jiny topic
+HW_ENTITY       = "select.hot_water_comfort_mode"  # jen pro "entity": select, number nebo input_number
+HW_OPTIONS      = ["economy", "normal", "luxury"]  # jen pro select: moznosti pro 0 / 1 / 2
+                                                   # (velikost pismen nevadi; S-serie napr. small/medium/large)
+
+# --- Nastaveni: ukladani profilu a stavu -------------------------------------
+USE_MQTT        = True                       # False = bez MQTT brokeru (pyscript.vv_ai_* entity)
 STATUS_TOPIC    = "nibepi/vv_ai/ha_mode"     # posledni rozhodnuti (pro dashboard)
 DIAG_TOPIC      = "nibepi/vv_ai/diag"        # diagnostika uceni
 STORE_TOPIC     = "nibepi/vv_ai/profile_store"
-STORE_ENTITY    = "sensor.vv_ai_profil_uloziste"
-STATUS_ENTITY   = "sensor.vv_ai_rozhodnuti"  # MQTT senzor ze STATUS_TOPIC (pamatuje posledni zapis)
+STORE_ENTITY    = "sensor.vv_ai_profil_uloziste" if USE_MQTT else "pyscript.vv_ai_profil"
+STATUS_ENTITY   = "sensor.vv_ai_rozhodnuti" if USE_MQTT else "pyscript.vv_ai_rozhodnuti"
+DIAG_ENTITY     = "pyscript.vv_ai_diagnostika"   # jen pro USE_MQTT = False
 
 # --- Nastaveni: chovani -------------------------------------------------------
 PREHEAT_H        = 2      # kolik hodin dopredu se diva do profilu
@@ -46,9 +59,9 @@ BT7_MIN          = 43.0   # °C, pod tim vzdy Normal
 BT6_MIN          = 42.0   # °C, pod tim vzdy Normal
 DROP_MIN         = 2.0    # °C, minimalni pokles BT6 za hodinu, ktery se pocita jako odber
 FALLBACK         = 1      # rezim pri vypadku dat
-HW_REFRESH_H     = 6      # beze zmeny rezimu se 47041 zapise znovu nejdriv po tolika hodinach (EEPROM)
+HW_REFRESH_H     = 6      # beze zmeny rezimu se zapise znovu nejdriv po tolika hodinach (EEPROM)
 
-# Prahy ceny (stejna jednotka jako SPOT_ENTITY, napr. Kc/kWh)
+# Prahy ceny (stejna jednotka jako SPOT_ENTITY; vychozi hodnoty jsou pro Kc/kWh!)
 PRICE_VERY_CHEAP = 0.0    # <= -> Luxury (zaporna/nulova cena)
 PRICE_CHEAP      = 4.5    # <= -> aspon Normal
 PRICE_NORMAL     = 6.0    # <= -> aspon Normal
@@ -73,6 +86,23 @@ def get_float(entity_id):
     except (ValueError, TypeError, NameError):
         return None
 
+def publish(kind, data, value):
+    # kind: "status" | "diag" | "store" -> retained MQTT, nebo pyscript entita (USE_MQTT = False)
+    if USE_MQTT:
+        topic = {"status": STATUS_TOPIC, "diag": DIAG_TOPIC, "store": STORE_TOPIC}[kind]
+        service.call("mqtt", "publish", topic=topic, payload=json.dumps(data), qos=1, retain=True)
+    else:
+        entity = {"status": STATUS_ENTITY, "diag": DIAG_ENTITY, "store": STORE_ENTITY}[kind]
+        state.set(entity, value, new_attributes=data)
+
+@time_trigger("startup")
+def vv_ai_startup():
+    if not USE_MQTT:
+        # pyscript.* entity si HA pamatuje pres restart jen po state.persist
+        state.persist(STORE_ENTITY)
+        state.persist(STATUS_ENTITY)
+        state.persist(DIAG_ENTITY)
+
 def load_profile():
     try:
         st = state.get(STORE_ENTITY)
@@ -86,7 +116,7 @@ def load_profile():
         last_hi  = attrs.get("last_hi")
         if (isinstance(profile, list) and len(profile) == 168 and
                 isinstance(counts, list) and len(counts) == 168):
-            return {"profile": profile, "counts": counts,
+            return {"profile": list(profile), "counts": list(counts),
                     "last_bt6": last_bt6, "last_hi": last_hi}
         log.warning("VV-AI: profil ma spatny format, zacinam s prazdnym")
     except Exception as e:
@@ -98,17 +128,40 @@ def _empty_profile():
 
 def save_profile(prof):
     try:
-        service.call("mqtt", "publish",
-                     topic=STORE_TOPIC,
-                     payload=json.dumps(prof),
-                     qos=1, retain=True)
+        publish("store", prof, prof.get("last_bt6"))
         nonzero = len([v for v in prof['profile'] if v > 0])
         log.info(f"VV-AI: profil ulozen last_bt6={prof.get('last_bt6')} nonzero={nonzero}")
     except Exception as e:
         log.error(f"VV-AI: save_profile CHYBA ({e})")
 
+def write_mode(mode):
+    # Zapise rezim do cerpadla. Vraci False, kdyz entita uz rezim ma (nic se nezapsalo).
+    if HW_WRITE != "entity":
+        service.call("mqtt", "publish", topic=HW_TOPIC, payload=str(mode), qos=1, retain=False)
+        return True
+    domain = HW_ENTITY.split(".")[0]
+    current = state.get(HW_ENTITY)
+    if domain == "select":
+        wanted = str(HW_OPTIONS[mode]).lower()
+        options = (state.getattr(HW_ENTITY) or {}).get("options") or []
+        match = [o for o in options if str(o).lower() == wanted]
+        if options and not match:
+            raise ValueError(f"{HW_ENTITY} nema moznost '{HW_OPTIONS[mode]}' (ma {options})")
+        option = match[0] if match else HW_OPTIONS[mode]
+        if str(current).lower() == wanted:
+            return False
+        service.call("select", "select_option", entity_id=HW_ENTITY, option=option)
+    else:
+        try:
+            if float(current) == float(mode):
+                return False
+        except (ValueError, TypeError):
+            pass
+        service.call(domain, "set_value", entity_id=HW_ENTITY, value=mode)
+    return True
+
 def send_mode(mode, reason=""):
-    # 47041 se zapisuje jen pri zmene rezimu (nebo jednou za HW_REFRESH_H hodin) – setri EEPROM.
+    # Rezim se zapisuje jen pri zmene (nebo jednou za HW_REFRESH_H hodin) – setri EEPROM.
     # Status (duvod) se publikuje vzdy.
     try:
         last_mode  = None
@@ -121,15 +174,16 @@ def send_mode(mode, reason=""):
             pass
         now_ts = datetime.now().timestamp()
         if last_mode != mode or now_ts - last_write >= HW_REFRESH_H * 3600:
-            service.call("mqtt", "publish",
-                         topic=HW_TOPIC, payload=str(mode), qos=1, retain=False)
-            last_write = now_ts
-            log.info(f"VV-AI: -> {MODE_NAMES[mode]} ({reason})")
-        service.call("mqtt", "publish",
-                     topic=STATUS_TOPIC,
-                     payload=json.dumps({"mode": mode, "name": MODE_NAMES[mode],
-                                         "reason": reason, "written": last_write}),
-                     qos=1, retain=True)
+            try:
+                if write_mode(mode):
+                    log.info(f"VV-AI: -> {MODE_NAMES[mode]} ({reason})")
+                last_write = now_ts
+            except Exception as we:
+                log.warning(f"VV-AI: zapis rezimu {MODE_NAMES[mode]} selhal ({we})")
+                reason = f"ZAPIS SELHAL: {we} | {reason}"
+                mode = last_mode if last_mode in MODE_NAMES else mode
+        publish("status", {"mode": mode, "name": MODE_NAMES[mode],
+                           "reason": reason, "written": last_write}, MODE_NAMES[mode])
     except Exception as e:
         log.warning(f"VV-AI: nelze odeslat mode {mode} ({e})")
 
@@ -144,9 +198,7 @@ def vv_ai_learn():
         if bt6 is None:
             log.warning("VV-AI uceni: BT6 nedostupna, preskakuji")
             try:
-                service.call("mqtt", "publish", topic=DIAG_TOPIC,
-                             payload=json.dumps({"status": "bt6_none", "hi": int(hi)}),
-                             qos=1, retain=True)
+                publish("diag", {"status": "bt6_none", "hi": int(hi)}, f"bt6_none:{hi}")
             except Exception as de:
                 log.error(f"VV-AI: diag bt6_none CHYBA ({de})")
             return
@@ -177,16 +229,14 @@ def vv_ai_learn():
 
         nonzero = len([v for v in prof["profile"] if v > 0])
         try:
-            service.call("mqtt", "publish", topic=DIAG_TOPIC,
-                         payload=json.dumps({
-                             "status": "ok",
-                             "hi": int(hi),
-                             "bt6": float(bt6),
-                             "last_bt6": float(last_bt6) if last_bt6 is not None else None,
-                             "learned": bool(learned),
-                             "nonzero_slots": int(nonzero),
-                         }),
-                         qos=1, retain=True)
+            publish("diag", {
+                "status": "ok",
+                "hi": int(hi),
+                "bt6": float(bt6),
+                "last_bt6": float(last_bt6) if last_bt6 is not None else None,
+                "learned": bool(learned),
+                "nonzero_slots": int(nonzero),
+            }, f"ok:{hi}")
         except Exception as de:
             log.error(f"VV-AI: diag ok CHYBA ({de})")
 
