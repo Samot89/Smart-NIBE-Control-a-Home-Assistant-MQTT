@@ -1,6 +1,6 @@
 # 🏠 Smart NIBE Control – Adaptive Heat Pump Control (MQTT/Modbus or myUplink)
 
-[![Version](https://img.shields.io/badge/version-v4.11-blue)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-v4.11.2-blue)](CHANGELOG.md)
 [![Platform](https://img.shields.io/badge/Home%20Assistant-Blueprint-41BDF5?logo=homeassistant)](https://www.home-assistant.io/)
 [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
@@ -45,7 +45,7 @@ The resulting offset is the sum of all components:
 ```
 offset = spot_influence + equithermal_influence + indoor_influence × gain
        + bonus_6h_block + preheat_bonus − solar_malus
-       + forecast_bonus + cop_bonus
+       + forecast_bonus
 ```
 
 ### Spot price influence (v4.4)

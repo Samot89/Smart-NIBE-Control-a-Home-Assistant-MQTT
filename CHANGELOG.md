@@ -6,6 +6,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [v4.11.2] – 2026-11-23
+
+### Removed
+- **COP component.** It reduced the offset when COP was high and raised it when COP was low –
+  the opposite of what saves money (heat is cheapest when COP is high), it could feed itself
+  (higher offset → higher flow temperature → lower COP → even higher offset), duplicated the
+  outdoor temperature effect, and a COP sensor showing 0 while the compressor is stopped added
+  +0.8. Hardly anyone has a COP sensor anyway (neither NibePi nor myUplink provides one).
+- The *COP sensor* input stays but is ignored, so existing automations keep working.
+  Debug payload: `input_sensors.cop` removed, `8_cop_bonus.value` is always 0.
+- Helpery.md: the three *NIBE Debug COP* MQTT sensors – delete them from your `mqtt.yaml`.
+
+---
+
 ## [v4.11.1] – 2026-11-23
 
 ### Fixed (VV-AI pyscript)

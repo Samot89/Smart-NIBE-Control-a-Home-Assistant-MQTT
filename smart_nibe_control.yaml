@@ -1,5 +1,5 @@
 blueprint:
-  name: Smart NIBE – Adaptive Heat Curve Control (MQTT/Modbus or myUplink) v4.11
+  name: Smart NIBE – Adaptive Heat Curve Control (MQTT/Modbus or myUplink) v4.11.2
   description: |
     Adaptive control of a NIBE heat pump: smoothly adjusts the heat curve offset
     (register 47011) – never switches the compressor on/off.
@@ -7,8 +7,8 @@ blueprint:
     **Works with** NibePi / any Modbus–MQTT bridge (MQTT write) **or** the NIBE /
     myUplink integration (writes the `number` entity directly) – see *How to write the offset*.
 
-    **8 components:** spot price, equithermal shift, indoor temperature, cheapest block,
-    pre-heating before price rise, solar braking, weather forecast trend, COP.
+    **7 components:** spot price, equithermal shift, indoor temperature, cheapest block,
+    pre-heating before price rise, solar braking, weather forecast trend.
 
     **Protection:** dead band, step limit, degree minutes guard, minimum write interval
     (EEPROM), HDO blocking.
@@ -84,14 +84,14 @@ blueprint:
             - input_number
 
     # ==========================================
-    # COP SENSOR v4.3
+    # COP SENSOR – no longer used since v4.11.2
     # ==========================================
     cop_sensor:
-      name: 🔋 COP sensor (Coefficient of Performance)
+      name: 🔋 COP sensor – no longer used
       description: >
-        Optional – e.g. sensor.nibe_cop_heat_2.
-        Typical values 4.0–7.5 for NIBE ground-source.
-        Thresholds: >7.0→-0.8, >6.5→-0.5, >6.0→-0.3, <5.0→+0.5, <4.0→+0.8
+        Ignored since v4.11.2 – the COP component was removed (it worked against the price logic
+        and added +0.8 whenever the compressor stopped and the sensor showed 0). Kept only so
+        existing automations keep working – leave it empty.
       default: none
       selector:
         entity:
@@ -480,35 +480,13 @@ action:
       # 7. SPOT PRICE INFLUENCE (v4.4: reduced 3×)
       spot_influence_raw: "{{ (-0.3 * price_now | float) + 1.5 }}"
 
-      # 8. COP BONUS – thresholds for NIBE ground-source (range 4.0–7.5)
-      cop_value: >
-        {% if not cop_set %}
-          6.0
-        {% else %}
-          {{ states(cop_ent) | float(6.0) }}
-        {% endif %}
-      cop_bonus: >
-        {% set cop = cop_value | float %}
-        {% if cop > 7.0 %}
-          -0.8
-        {% elif cop > 6.5 %}
-          -0.5
-        {% elif cop > 6.0 %}
-          -0.3
-        {% elif cop < 4.0 %}
-          0.8
-        {% elif cop < 5.0 %}
-          0.5
-        {% else %}
-          0.0
-        {% endif %}
 
   - variables:
       # MAIN CALCULATION (8 COMPONENTS)
       raw_calc: >
         {{ spot_influence_raw | float + equi_shift | float + cheap_block_bonus | float +
            (indoor_correction | float * gain_value | float) + preheat_bonus | float +
-           solar_malus | float + forecast_bonus | float + cop_bonus | float }}
+           solar_malus | float + forecast_bonus | float }}
 
       max_step: "{% if dm_value | float < -800 %}1{% else %}2{% endif %}"
 
@@ -587,8 +565,7 @@ action:
           [cheap_block_bonus | float, 'cheapest 6h block'],
           [preheat_bonus | float, 'pre-heating before price rise'],
           [solar_malus | float, 'solar gain expected'],
-          [forecast_bonus | float, ('colder' if trend_value | float < 0 else 'warmer') ~ ' weather coming (' ~ (trend_value | float | round(1)) ~ ' °C in 6 h)'],
-          [cop_bonus | float, ('high' if cop_bonus | float < 0 else 'low') ~ ' COP (' ~ (cop_value | float | round(1)) ~ ')']
+          [forecast_bonus | float, ('colder' if trend_value | float < 0 else 'warmer') ~ ' weather coming (' ~ (trend_value | float | round(1)) ~ ' °C in 6 h)']
         ] %}
         {% set ns = namespace(r=[]) %}
         {% for i in items %}{% if i[0] | abs >= 0.3 %}{% set ns.r = ns.r + [[i[0] | abs, i[1] ~ ' ' ~ ('%+.1f' | format(i[0]))]] %}{% endif %}{% endfor %}
@@ -614,14 +591,13 @@ action:
         {% set spot_influence = spot_influence_raw | float %}
         {% set indoor_influence = indoor_correction | float * gain_value | float %}
         {% set equi_influence = equi_shift | float %}
-        {% set cop_influence = cop_bonus | float %}
         {{
           {
             "status": status_text,
             "metadata": {
-              "version": "4.11",
+              "version": "4.11.2",
               "timestamp": now().isoformat(),
-              "components_count": 8
+              "components_count": 7
             },
             "offset": {
               "final": offset_final | int,
@@ -634,13 +610,7 @@ action:
               "outdoor_temperature": {"value": temp_outdoor | round(2), "weather_state": weather_state},
               "indoor_temperature": {"value": temp_indoor | round(2), "diff_from_target": temp_diff | round(3)},
               "target_temperature": {"value": target_temp_var | float | round(2), "bias": bias_value | float | round(2), "source": target_temp_ent if target_temp_set else "fixed"},
-              "degree_minutes": {"value": dm_value | round(0), "alarm": dm_value | float < -800},
-              "cop": {
-                "entity": cop_ent,
-                "value": cop_value | float | round(2),
-                "configured": cop_set,
-                "quality": "Excellent" if cop_value | float > 7.0 else ("Very good" if cop_value | float > 6.5 else ("Good" if cop_value | float > 6.0 else ("Average" if cop_value | float > 5.0 else ("Poor" if cop_value | float > 4.0 else "Very poor (frost)"))))
-              }
+              "degree_minutes": {"value": dm_value | round(0), "alarm": dm_value | float < -800}
             },
             "offset_calculation": {
               "total_sum": raw_calc | round(3),
@@ -692,16 +662,13 @@ action:
                   "percent_of_total": ((forecast_bonus | float / raw_calc * 100) if raw_calc != 0 else 0) | round(1)
                 },
                 "8_cop_bonus": {
-                  "value": cop_influence | round(3),
-                  "cop": cop_value | float | round(2),
-                  "configured": cop_set,
-                  "formula": "COP >7.0→-0.8, >6.5→-0.5, >6.0→-0.3, <4.0→+0.8, <5.0→+0.5",
-                  "logic": "High COP = efficient HP → reduce offset. Low COP = frost/inefficient → increase offset",
-                  "active": cop_influence != 0,
-                  "percent_of_total": ((cop_influence / raw_calc * 100) if raw_calc != 0 else 0) | round(1)
+                  "value": 0,
+                  "removed": "v4.11.2 – COP component no longer used",
+                  "active": false,
+                  "percent_of_total": 0
                 }
               },
-              "control_sum": (spot_influence + equi_influence + indoor_influence + (cheap_block_bonus | float) + (preheat_bonus | float) + (solar_malus | float) + (forecast_bonus | float) + cop_influence) | round(3)
+              "control_sum": (spot_influence + equi_influence + indoor_influence + (cheap_block_bonus | float) + (preheat_bonus | float) + (solar_malus | float) + (forecast_bonus | float)) | round(3)
             },
             "protection_and_limits": {
               "dm_guard": {"degree_minutes": dm_value | round(0), "max_step": max_step | int},

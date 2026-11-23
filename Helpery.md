@@ -364,26 +364,6 @@ mqtt:
       unit_of_measurement: ""
       icon: mdi:crystal-ball
 
-    - name: "NIBE Debug COP"
-      unique_id: nibe_debug_cop_value
-      state_topic: "nibe/debug/offset_calc"
-      value_template: "{{ value_json.input_sensors.cop.value }}"
-      unit_of_measurement: ""
-      icon: mdi:lightning-bolt-circle
-
-    - name: "NIBE Debug COP Quality"
-      unique_id: nibe_debug_cop_quality
-      state_topic: "nibe/debug/offset_calc"
-      value_template: "{{ value_json.input_sensors.cop.quality }}"
-      icon: mdi:star-circle
-
-    - name: "NIBE Debug COP Bonus"
-      unique_id: nibe_debug_cop_bonus
-      state_topic: "nibe/debug/offset_calc"
-      value_template: "{{ value_json.offset_calculation.component_breakdown['8_cop_bonus'].value }}"
-      unit_of_measurement: ""
-      icon: mdi:plus-minus
-
   number:
     - name: Heat Curve Offset
       unique_id: heat_offset_s1
