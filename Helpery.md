@@ -56,19 +56,85 @@ By monitoring them, you can:
 
 ---
 
-### 🔹 Spot price sensor
+### 🔹 Spot price sensor and price list
 
-**Purpose:**
-Provides the current electricity price.
+**Spot price sensor** – the current electricity price (state, currency/kWh).
 
-**Requirements:**
-- Must have a current price
-- Ideally also a `today[]` attribute for look-ahead
+**Price list** – today's (and tomorrow's) prices, used for pre-heating and the **relative spot mode**
+(v4.13). The blueprint reads it from the spot price sensor, or from the optional
+*📋 Price list sensor*. The format is recognised automatically; 15-minute prices are averaged per hour.
+
+| Integration | Where the prices are | Status |
+|---|---|---|
+| CZ Energy Spot Prices | timestamp attributes (`2026-11-23T00:00:00+01:00: 4.58`) | ✅ tested (live) |
+| Nord Pool – core integration | **no price list** → use the helper sensor below | ✅ tested (real data, SE3) |
+| Own template sensor with `today` / `tomorrow` lists | `today`, `tomorrow` | ✅ tested |
+| Nord Pool (HACS) | `raw_today` / `today` | 🧪 **testers wanted** |
+| ENTSO-e (HACS) | `prices_today` / `prices_tomorrow` | 🧪 **testers wanted** |
+| Energi Data Service (HACS) | `raw_today` / `today` | 🧪 **testers wanted** |
+| Tibber, Octopus, Amber, … | not built in – a helper sensor with `today` / `tomorrow` lists works | 🧪 **testers wanted** |
+
+> 🧪 **Testers wanted:** the formats marked above were implemented from the integrations' source code,
+> not tested on real data. If you use one of them, please check the debug payload
+> (`input_sensors.price_list`: `source`, `hours_today` should be 24) and report in
+> [issue #5](https://github.com/Samot89/Smart-NIBE-Control-HA-Modbus-MQTT-myUplink/issues/5) – thanks!
+
+#### Price list for the core Nord Pool integration
+
+The core Nord Pool integration only exposes the current / next / min / max price. The full day is
+available through the action `nordpool.get_prices_for_date`. This trigger-based template sensor
+calls it once an hour (not on every blueprint run) and stores the prices in currency/kWh:
+
+```yaml
+template:
+  - trigger:
+      - trigger: time_pattern
+        minutes: 1
+      - trigger: homeassistant
+        event: start
+    action:
+      - action: nordpool.get_prices_for_date
+        continue_on_error: true
+        data:
+          config_entry: YOUR_NORD_POOL_CONFIG_ENTRY_ID
+          date: "{{ now().date() }}"
+        response_variable: np_today
+      - action: nordpool.get_prices_for_date
+        continue_on_error: true
+        data:
+          config_entry: YOUR_NORD_POOL_CONFIG_ENTRY_ID
+          date: "{{ (now() + timedelta(days=1)).date() }}"
+        response_variable: np_tomorrow
+    sensor:
+      - name: "NIBE price list"
+        unique_id: nibe_price_list
+        icon: mdi:format-list-numbered
+        # number of price slots for today (96 = 15-min prices)
+        state: "{{ (np_today.values() | first | default([])) | length if np_today is mapping else 0 }}"
+        attributes:
+          # Nord Pool returns currency/MWh – converted to currency/kWh like the price sensors
+          raw_today: >
+            {% set ns = namespace(l=[]) %}
+            {% for e in ((np_today.values() | first | default([])) if np_today is mapping else []) %}
+              {% set ns.l = ns.l + [{'start': e.start, 'price': (e.price / 1000) | round(5)}] %}
+            {% endfor %}
+            {{ ns.l }}
+          raw_tomorrow: >
+            {% set ns = namespace(l=[]) %}
+            {% for e in ((np_tomorrow.values() | first | default([])) if np_tomorrow is mapping else []) %}
+              {% set ns.l = ns.l + [{'start': e.start, 'price': (e.price / 1000) | round(5)}] %}
+            {% endfor %}
+            {{ ns.l }}
+```
+
+Replace `YOUR_NORD_POOL_CONFIG_ENTRY_ID` – easiest: *Developer tools → Actions →
+Nord Pool: Get prices for date*, pick your entry, switch to YAML mode and copy the `config_entry`.
+Then select `sensor.nibe_price_list` as *📋 Price list sensor* in the blueprint (the spot price
+sensor stays your Nord Pool current price sensor).
 
 **Used for:**
-- Cost optimization
+- Spot price influence (absolute or relative)
 - Pre-heating logic
-- Economic decisions
 
 ---
 

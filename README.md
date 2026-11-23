@@ -1,6 +1,6 @@
 # 🏠 Smart NIBE Control – Adaptive Heat Pump Control (MQTT/Modbus or myUplink)
 
-[![Version](https://img.shields.io/badge/version-v4.12.2-blue)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-v4.13-blue)](CHANGELOG.md)
 [![Platform](https://img.shields.io/badge/Home%20Assistant-Blueprint-41BDF5?logo=homeassistant)](https://www.home-assistant.io/)
 [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
@@ -60,6 +60,14 @@ spot_influence = (−0.3 × price [currency/kWh]) + 1.5
 | 10 units/kWh | **−1.5** (slightly reduces) |
 
 > 💡 **v4.4:** The spot price influence was intentionally reduced 3× (previously coefficient −0.8/+4.0). The system now prioritizes indoor comfort over aggressive price optimization.
+
+**Relative mode (v4.13, optional):** compares the current price with today's average instead –
+works with any currency and price level:
+```
+spot_influence = −k × (price − today's average) / today's average      (limited to ±1.5)
+```
+It needs a price list – supported sources and a helper for the core Nord Pool integration are in
+[Helpery.md](Helpery.md#-spot-price-sensor-and-price-list). Some sources still need testers.
 
 ### Indoor temperature correction
 ```

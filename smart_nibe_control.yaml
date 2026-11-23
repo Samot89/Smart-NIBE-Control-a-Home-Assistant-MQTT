@@ -1,5 +1,5 @@
 blueprint:
-  name: Smart NIBE – Adaptive Heat Curve Control (MQTT/Modbus or myUplink) v4.12.2
+  name: Smart NIBE – Adaptive Heat Curve Control (MQTT/Modbus or myUplink) v4.13
   description: |
     Adaptive control of a NIBE heat pump: smoothly adjusts the heat curve offset
     (register 47011) – never switches the compressor on/off.
@@ -35,6 +35,48 @@ blueprint:
       selector:
         entity:
           domain: sensor
+
+    price_list_sensor:
+      name: 📋 Price list sensor (optional)
+      description: >
+        Sensor with today's (and tomorrow's) prices in its attributes – used for pre-heating and
+        the relative spot mode. Leave empty to read them from the spot price sensor above.
+        Recognised automatically: Czech spot prices (timestamp attributes), Nord Pool HACS
+        (`today` / `raw_today`), ENTSO-e (`prices_today`), Energi Data Service (`raw_today`) or any
+        sensor with `today` / `tomorrow` lists. The core Nord Pool integration has no price list
+        in its attributes – Helpery.md has a ready-made helper sensor for it.
+      default: none
+      selector:
+        entity:
+          domain: sensor
+
+    spot_mode:
+      name: ⚖️ Spot price influence
+      description: >
+        Absolute – the original formula −0.3 × price + 1.5 (neutral at 5 per kWh, tuned for CZK).
+        Relative – compares the current price with today's average: cheaper than average → more
+        heat, more expensive → less. Works with any currency and price level. Needs a price list
+        with at least 20 hours, otherwise the absolute formula is used.
+      default: absolute
+      selector:
+        select:
+          options:
+            - label: Absolute (original formula)
+              value: absolute
+            - label: Relative to today's average price
+              value: relative
+
+    spot_k:
+      name: ⚖️ Relative spot strength
+      description: >
+        Only for the relative mode: offset change for a price 100 % above / below today's average,
+        limited to ±1.5. With 1.0 a price 30 % above average lowers the offset by 0.3.
+      default: 1.0
+      selector:
+        number:
+          min: 0.1
+          max: 5
+          step: 0.1
 
     degree_minutes:
       name: 🌡️ Degree Minutes sensor
@@ -221,6 +263,50 @@ blueprint:
           max: 240
           step: 5
 
+    dm_guard_enable:
+      name: 🛡️ DM guard – cap the offset when degree minutes drop
+      description: >
+        Protects against the immersion heater: when degree minutes fall below the threshold, the
+        offset is capped until they recover above the release threshold (hysteresis). The cap is
+        written even inside the minimum write interval and the dead band. Off = previous behaviour.
+      default: false
+      selector:
+        boolean: {}
+
+    dm_guard_threshold:
+      name: 🛡️ DM guard – threshold
+      description: >
+        Cap the offset when degree minutes fall below this. Set it a little above the value where
+        your immersion heater starts (often around −460 = compressor start −60 + addition −400).
+      default: -400
+      selector:
+        number:
+          min: -2000
+          max: 0
+          step: 10
+
+    dm_guard_release:
+      name: 🛡️ DM guard – release threshold
+      description: >
+        Keep the cap until degree minutes are back above this (hysteresis – must be higher than the
+        threshold). Without hysteresis the offset flips back and forth and pushes DM down again.
+      default: -200
+      selector:
+        number:
+          min: -2000
+          max: 0
+          step: 10
+
+    dm_guard_cap:
+      name: 🛡️ DM guard – offset cap
+      description: Highest offset allowed while the DM guard is active.
+      default: -2
+      selector:
+        number:
+          min: -10
+          max: 10
+          step: 1
+
     comfort_override_delta:
       name: 🛟 Comfort override threshold
       description: >
@@ -359,6 +445,13 @@ action:
         {% else %}0{% endif %}
       temp_indoor: "{{ states(in_temp_ent) | float(target_temp_var) }}"
       dm_value: "{{ states(dm_ent) | float(0) }}"
+      dm_cap_on: !input dm_guard_enable
+      dm_cap_thr: !input dm_guard_threshold
+      dm_cap_rel: !input dm_guard_release
+      dm_cap_val: !input dm_guard_cap
+      spot_mode: !input spot_mode
+      spot_k: !input spot_k
+      price_list_input: !input price_list_sensor
       # Integrations like myUplink make their entities unavailable for a while after a
       # write – never compute or write from an unknown current offset.
       offset_available: "{{ is_number(states(curr_off_ent)) }}"
@@ -380,56 +473,77 @@ action:
       now_timestamp: "{{ now().timestamp() }}"
 
   - variables:
-      today_prices_raw: >
-        {% set t = state_attr(spot_ent, 'today') %}
-        {% if t is none %}{% set t = state_attr(spot_ent, 'raw_today') %}{% endif %}
-        {% if t is none %}{% set t = state_attr(spot_ent, 'prices_today') %}{% endif %}
-        {{ t }}
-      tomorrow_prices_raw: >
-        {% set t = state_attr(spot_ent, 'tomorrow') %}
-        {% if t is none %}{% set t = state_attr(spot_ent, 'raw_tomorrow') %}{% endif %}
-        {% if t is none %}{% set t = state_attr(spot_ent, 'prices_tomorrow') %}{% endif %}
-        {{ t }}
+      # PRICE LIST – collects [timestamp, price] points from any common format, then builds
+      # 24 hourly prices for today and tomorrow (15-min prices are averaged per hour).
+      price_ent: "{{ price_list_input if price_list_input not in [none, '', 'none'] else spot_ent }}"
+      price_points: >
+        {% set st = states[price_ent] if price_ent is string and '.' in price_ent else none %}
+        {% set a = st.attributes if st is not none else {} %}
+        {% set d0 = today_at().timestamp() %}
+        {% set ns = namespace(p=[], src='none') %}
+        {% for key in ['raw_today', 'raw_tomorrow', 'prices_today', 'prices_tomorrow'] %}
+          {% set l = a.get(key) %}
+          {% if l is iterable and l is not string and l is not mapping %}
+            {% for e in l %}
+              {% if e is mapping %}
+                {% set t = e.get('start', e.get('time', e.get('hour'))) %}
+                {% set v = e.get('value', e.get('price', e.get('price_with_tax'))) %}
+                {% set ts = as_timestamp(t, none) if t is not none else none %}
+                {% if ts is not none and v is number %}{% set ns.p = ns.p + [[ts, v]] %}{% if ns.src == 'none' %}{% set ns.src = key %}{% endif %}{% endif %}
+              {% endif %}
+            {% endfor %}
+          {% endif %}
+        {% endfor %}
+        {% if ns.p | length == 0 %}
+          {% for k, v in a.items() %}
+            {% if k is string and k[:2] == '20' and v is number %}
+              {% set ts = as_timestamp(k, none) %}
+              {% if ts is not none %}{% set ns.p = ns.p + [[ts, v]] %}{% set ns.src = 'timestamp attributes' %}{% endif %}
+            {% endif %}
+          {% endfor %}
+        {% endif %}
+        {% if ns.p | length == 0 %}
+          {% for key, base in [['today', d0], ['tomorrow', d0 + 86400]] %}
+            {% set l = a.get(key) %}
+            {% if l is mapping and ('values' in l or 'prices' in l) %}{% set l = l['values'] if 'values' in l else l['prices'] %}{% endif %}
+            {% if l is mapping %}{% set l = l | dictsort | map(attribute=1) | list %}{% endif %}
+            {% if l is iterable and l is not string and l | length > 0 %}
+              {% set step = 86400 / (l | length) %}
+              {% for v in l %}
+                {% set v2 = (v.get('value', v.get('price', v.get('price_with_tax')))) if v is mapping else v %}
+                {% if v2 is number %}{% set ns.p = ns.p + [[base + loop.index0 * step, v2]] %}{% if ns.src == 'none' %}{% set ns.src = key ~ ' list' %}{% endif %}{% endif %}
+              {% endfor %}
+            {% endif %}
+          {% endfor %}
+        {% endif %}
+        {{ {'src': ns.src, 'p': ns.p} }}
+      price_source: "{{ price_points.src if price_points is mapping else 'none' }}"
       today_prices_list: >
-        {% set t = today_prices_raw %}
-        {% if t is mapping and ('values' in t or 'prices' in t) %}
-          {% set t = t['values'] if 'values' in t else t['prices'] %}
-        {% endif %}
-        {% if t is mapping %}
-          {% set vals = t | dictsort | map(attribute=1) | list %}
-          {% if vals | length > 0 and vals[0] is not mapping %}
-            {{ vals | list }}
-          {% elif vals | length > 0 %}
-            {% for key in ['value', 'price', 'price_with_tax'] %}
-              {% if key in vals[0] %}
-                {{ vals | map(attribute=key) | list }}
-                {% break %}
-              {% endif %}
-            {% endfor %}
-          {% else %}[]{% endif %}
-        {% elif t is iterable and t is not string %}
-          {{ t | list }}
-        {% else %}[]{% endif %}
+        {% set pts = price_points.p if price_points is mapping else [] %}
+        {% set d0 = today_at().timestamp() %}
+        {% set ns = namespace(h=[]) %}
+        {% for i in range(24) %}
+          {% set a = d0 + i * 3600 %}
+          {% set v = pts | selectattr('0', '>=', a) | selectattr('0', '<', a + 3600) | map(attribute='1') | list %}
+          {% set ns.h = ns.h + [((v | sum) / (v | length)) | round(4) if v | length > 0 else none] %}
+        {% endfor %}
+        {{ ns.h }}
       tomorrow_prices_list: >
-        {% set t = tomorrow_prices_raw %}
-        {% if t is mapping and ('values' in t or 'prices' in t) %}
-          {% set t = t['values'] if 'values' in t else t['prices'] %}
-        {% endif %}
-        {% if t is mapping %}
-          {% set vals = t | dictsort | map(attribute=1) | list %}
-          {% if vals | length > 0 and vals[0] is not mapping %}
-            {{ vals | list }}
-          {% elif vals | length > 0 %}
-            {% for key in ['value', 'price', 'price_with_tax'] %}
-              {% if key in vals[0] %}
-                {{ vals | map(attribute=key) | list }}
-                {% break %}
-              {% endif %}
-            {% endfor %}
-          {% else %}[]{% endif %}
-        {% elif t is iterable and t is not string %}
-          {{ t | list }}
-        {% else %}[]{% endif %}
+        {% set pts = price_points.p if price_points is mapping else [] %}
+        {% set d1 = today_at().timestamp() + 86400 %}
+        {% set ns = namespace(h=[], n=0) %}
+        {% for i in range(24) %}
+          {% set a = d1 + i * 3600 %}
+          {% set v = pts | selectattr('0', '>=', a) | selectattr('0', '<', a + 3600) | map(attribute='1') | list %}
+          {% if v | length > 0 %}{% set ns.n = ns.n + 1 %}{% endif %}
+          {% set ns.h = ns.h + [((v | sum) / (v | length)) | round(4) if v | length > 0 else none] %}
+        {% endfor %}
+        {{ ns.h if ns.n > 0 else [] }}
+      price_hours_today: "{{ today_prices_list | select('number') | list | length }}"
+      day_mean_price: >
+        {% set p = today_prices_list | select('number') | list %}
+        {{ ((p | sum) / (p | length)) | round(4) if p | length > 0 else none }}
+      spot_relative_used: "{{ spot_mode == 'relative' and price_hours_today | int >= 20 }}"
       all_prices: >
         {% set t = today_prices_list %}
         {% set tm = tomorrow_prices_list %}
@@ -443,7 +557,8 @@ action:
   - variables:
       # 1. PREHEAT BONUS
       preheat_bonus: >
-        {% if preheat_price | float > (price_now | float * 1.3) and price_now | float < 2.5 %}
+        {% set cheap_now = (price_now | float < day_mean_price | float) if spot_relative_used else (price_now | float < 2.5) %}
+        {% if preheat_price | float > (price_now | float * 1.3) and cheap_now %}
           1.5
         {% else %}0.0{% endif %}
 
@@ -483,8 +598,15 @@ action:
         {% if cheap_set and is_state(cheap_ent, 'on') %}1.0
         {% else %}0{% endif %}
 
-      # 7. SPOT PRICE INFLUENCE (v4.4: reduced 3×)
-      spot_influence_raw: "{{ (-0.3 * price_now | float) + 1.5 }}"
+      # 7. SPOT PRICE INFLUENCE – absolute (v4.4) or relative to today's average (v4.13)
+      spot_influence_raw: >
+        {% if spot_relative_used %}
+          {% set mean = day_mean_price | float %}
+          {% set rel = (price_now | float - mean) / ([mean | abs, 0.01] | max) %}
+          {{ [[-(spot_k | float) * rel, 1.5] | min, -1.5] | max | round(3) }}
+        {% else %}
+          {{ (-0.3 * price_now | float) + 1.5 }}
+        {% endif %}
 
 
   - variables:
@@ -496,6 +618,14 @@ action:
 
       max_step: "{% if dm_value | float < -800 %}1{% else %}2{% endif %}"
 
+      # DM GUARD – cap the offset while degree minutes are low (hysteresis via the current offset:
+      # the blueprint has no memory, so the cap stays while DM < release and the offset is still capped)
+      dm_cap_active: >
+        {{ dm_cap_on | bool and is_number(states(dm_ent)) and
+           (dm_value | float < dm_cap_thr | float or
+            (dm_value | float < dm_cap_rel | float and curr_offset | int <= dm_cap_val | int)) }}
+      dm_cap_urgent: "{{ dm_cap_active and offset_available and curr_offset | int > dm_cap_val | int }}"
+
       clamped_calc: >
         {% set val = raw_calc | float %}
         {% if temp_outdoor | float < -15 and val > 2.0 %}2
@@ -504,7 +634,7 @@ action:
         {% else %}{{ val | round | int }}{% endif %}
 
       offset_final: >
-        {% set target = clamped_calc | int %}
+        {% set target = [clamped_calc | int, dm_cap_val | int] | min if dm_cap_active else clamped_calc | int %}
         {% set current = curr_offset | int %}
         {% set diff = target - current %}
         {% set step = max_step | int %}
@@ -514,7 +644,8 @@ action:
         {% else %}{{ target }}{% endif %}
 
       effective_min_change: >
-        {% if trend_value | float | abs < 0.2 %}{{ stable_min_change_limit | int }}
+        {% if dm_cap_urgent %}1
+        {% elif trend_value | float | abs < 0.2 %}{{ stable_min_change_limit | int }}
         {% else %}{{ min_change_limit | int }}{% endif %}
 
   - variables:
@@ -528,7 +659,7 @@ action:
       minutes_since_write: "{{ ((now_timestamp - last_write_ts) / 60) | round(1) }}"
       comfort_override: "{{ comfort_delta | float > 0 and temp_diff | float | abs >= comfort_delta | float }}"
       allow_write_by_time: >
-        {{ not last_write_set or
+        {{ not last_write_set or dm_cap_urgent or
            minutes_since_write | float >= min_write_interval_min | float }}
 
   # PLAIN-TEXT STATUS (what is happening and why)
@@ -565,7 +696,8 @@ action:
       # Up to 3 strongest components (|value| >= 0.3) as text
       status_reasons: >-
         {% set items = [
-          [spot_influence_raw | float, ('cheap' if spot_influence_raw | float > 0 else 'expensive') ~ ' electricity (' ~ (price_now | float | round(2)) ~ ')'],
+          [spot_influence_raw | float, ('cheap' if spot_influence_raw | float > 0 else 'expensive') ~ ' electricity (' ~ (price_now | float | round(2))
+            ~ ((', ' ~ ('%+d' | format(((price_now | float - day_mean_price | float) / ([day_mean_price | float | abs, 0.01] | max) * 100) | round(0) | int)) ~ ' % vs today') if spot_relative_used else '') ~ ')'],
           [equi_shift | float, 'outdoor ' ~ (temp_outdoor | float | round(1)) ~ ' °C'],
           [indoor_correction | float * gain_value | float, 'house ' ~ (temp_diff | float | abs | round(1)) ~ ' °C ' ~ ('below' if temp_diff | float < 0 else 'above') ~ ' target'],
           [cheap_block_bonus | float, 'cheapest 6h block'],
@@ -575,7 +707,9 @@ action:
         ] %}
         {% set ns = namespace(r=[]) %}
         {% for i in items %}{% if i[0] | abs >= 0.3 %}{% set ns.r = ns.r + [[i[0] | abs, i[1] ~ ' ' ~ ('%+.1f' | format(i[0]))]] %}{% endif %}{% endfor %}
-        {{ (ns.r | sort(attribute='0', reverse=true) | map(attribute='1') | list)[:3] | join(', ') }}
+        {% set r = (ns.r | sort(attribute='0', reverse=true) | map(attribute='1') | list)[:3] %}
+        {% if dm_cap_active %}{% set r = ['DM guard: capped at ' ~ (dm_cap_val | int) ~ ' (DM ' ~ (dm_value | float | round(0) | int) ~ ')'] + r %}{% endif %}
+        {{ r | join(', ') }}
       status_text: >-
         {% set r = status_reasons | trim %}
         {% set b = block_reason | trim %}
@@ -601,7 +735,7 @@ action:
           {
             "status": status_text,
             "metadata": {
-              "version": "4.12.2",
+              "version": "4.13",
               "timestamp": now().isoformat(),
               "components_count": 7
             },
@@ -613,6 +747,7 @@ action:
             },
             "input_sensors": {
               "spot_price": {"value": price_now | round(3), "unit": "currency/kWh"},
+              "price_list": {"entity": price_ent, "source": price_source, "hours_today": price_hours_today | int, "hours_tomorrow": tomorrow_prices_list | select('number') | list | length, "today_mean": day_mean_price},
               "outdoor_temperature": {"value": temp_outdoor | round(2), "weather_state": weather_state},
               "indoor_temperature": {"value": temp_indoor | round(2), "diff_from_target": temp_diff | round(3)},
               "target_temperature": {"value": target_temp_var | float | round(2), "bias": bias_value | float | round(2), "source": target_temp_ent if target_temp_set else "fixed"},
@@ -623,8 +758,10 @@ action:
               "component_breakdown": {
                 "1_spot_price_influence": {
                   "value": spot_influence | round(3),
-                  "formula": "(-0.3 × price) + 1.5",
-                  "calculation": "(-0.3 × " ~ (price_now | round(2)) ~ ") + 1.5",
+                  "mode": "relative" if spot_relative_used else "absolute",
+                  "mode_selected": spot_mode,
+                  "formula": ("-k × (price − mean) / mean, k=" ~ spot_k ~ ", ±1.5") if spot_relative_used else "(-0.3 × price) + 1.5",
+                  "calculation": ("-" ~ spot_k ~ " × (" ~ (price_now | round(2)) ~ " − " ~ (day_mean_price | float | round(2)) ~ ") / " ~ (day_mean_price | float | round(2))) if spot_relative_used else ("(-0.3 × " ~ (price_now | round(2)) ~ ") + 1.5"),
                   "percent_of_total": ((spot_influence / raw_calc * 100) if raw_calc != 0 else 0) | round(1)
                 },
                 "2_equithermal_shift": {
@@ -677,7 +814,7 @@ action:
               "control_sum": (spot_influence + equi_influence + indoor_influence + (cheap_block_bonus | float) + (preheat_bonus | float) + (solar_malus | float) + (forecast_bonus | float)) | round(3)
             },
             "protection_and_limits": {
-              "dm_guard": {"degree_minutes": dm_value | round(0), "max_step": max_step | int},
+              "dm_guard": {"degree_minutes": dm_value | round(0), "max_step": max_step | int, "cap_enabled": dm_cap_on | bool, "cap_active": dm_cap_active, "cap": dm_cap_val | int, "threshold": dm_cap_thr | int, "release": dm_cap_rel | int, "urgent_write": dm_cap_urgent},
               "eeprom_protection": {"minutes_since_write": minutes_since_write | float, "write_allowed": allow_write_by_time or comfort_override, "interval_ok": allow_write_by_time, "comfort_override": comfort_override, "comfort_override_delta": comfort_delta | float}
             },
             "decision": {

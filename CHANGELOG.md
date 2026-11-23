@@ -6,6 +6,28 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [v4.13] – 2026-11-23
+
+### Added
+- **Relative spot mode** (`spot_mode: relative`, `spot_k`, #5): the spot price influence compares
+  the current price with today's average (`−k × (price − mean) / mean`, limited to ±1.5), so it
+  works with any currency and price level. Default stays `absolute`. Falls back to the absolute
+  formula when fewer than 20 hourly prices are known. In relative mode pre-heating uses "cheaper
+  than today's average" instead of the fixed 2.5.
+- **Price list from more integrations:** CZ Energy Spot Prices (timestamp attributes – pre-heating
+  never worked with it before), Nord Pool HACS, ENTSO-e, Energi Data Service and any sensor with
+  `today` / `tomorrow` lists. 15-minute prices are averaged per hour. New optional input
+  *📋 Price list sensor*. Helpery.md has a helper sensor for the core Nord Pool integration
+  (`nordpool.get_prices_for_date`, refreshed hourly, MWh → kWh).
+  **Testers wanted** for Nord Pool HACS, ENTSO-e, Energi Data Service and Tibber & co.
+- **DM guard with hysteresis** (`dm_guard_*`, off by default): when degree minutes fall below the
+  threshold the offset is capped (default −2) until they recover above the release threshold. The
+  cap is written even inside the write interval and dead band. Shown in the status
+  (*"DM guard: capped at -2 (DM -430)"*). Idea and data by Hogster (#12).
+- Debug payload: `input_sensors.price_list` (entity, source, hours), spot `mode`, DM guard state.
+
+---
+
 ## [v4.12.2] – 2026-11-23
 
 ### Fixed
