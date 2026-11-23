@@ -17,11 +17,12 @@ Assistantu, s čerpadlem komunikuje přes MQTT (nibepi nebo jiný Modbus ↔ MQT
 | Funkce | Popis |
 |---|---|
 | 🧠 **Učení odběrů** | Každou hodinu porovná BT6 (spodní část zásobníku) s předchozí hodinou. Pokles ≥ 2 °C = odběr. Ukládá týdenní profil – 168 slotů (den × hodina) s průměrným poklesem. |
-| 🔮 **Předehřev** | Dívá se 2 h dopředu do profilu: čeká se velký odběr → vyšší režim předem. |
+| 🔮 **Předehřev** | Dívá se do profilu na tuto a 2 následující hodiny: čeká se velký odběr → vyšší režim předem. |
 | ⚡ **Cena elektřiny** | Levná/záporná cena → vyšší režim, drahá → Economy (pokud se nečeká velký odběr). |
 | ☀️ **FVE boost** | Přetok ≥ 1500 W → Luxury, ≥ 500 W → aspoň Normal. |
 | 🛟 **Pojistky** | BT7 < 43 °C nebo BT6 < 42 °C → vždy Normal. Výpadek dat → Normal. |
 | 💾 **Bez souborů** | Profil je uložený jako retained MQTT zpráva – přežije restart HA. |
+| 🛡️ **Šetří EEPROM** | Režim (47041) se zapíše jen při změně, beze změny nejvýš jednou za 6 h (`HW_REFRESH_H`). |
 
 ### Pořadí rozhodování (každých 15 min)
 
@@ -31,7 +32,7 @@ Assistantu, s čerpadlem komunikuje přes MQTT (nibepi nebo jiný Modbus ↔ MQT
 3. BT6 < 42 °C                     → Normal
 4. FVE ≥ 1500 W                    → Luxury
    FVE ≥ 500 W                     → Normal (Luxury, pokud profil čeká velký odběr)
-5. podle ceny a profilu (příští 2 h):
+5. podle ceny a profilu (tato + příští 2 h):
    max. očekávaný pokles  ≥ 8 °C → Luxury | ≥ 3 °C → Normal | jinak Economy
    cena ≤ 0      → Luxury
    cena ≤ 4.5    → aspoň Normal
@@ -41,14 +42,16 @@ Assistantu, s čerpadlem komunikuje přes MQTT (nibepi nebo jiný Modbus ↔ MQT
 ```
 
 Prahy cen jsou v jednotce vašeho senzoru ceny (např. Kč/kWh včetně distribuce)
-a nastavují se na začátku `vv_ai.py`.
+a nastavují se na začátku `vv_ai.py`. **Výchozí hodnoty jsou pro Kč** – s jinou
+měnou (EUR, SEK…) je upravte, jinak bude VV-AI skoro pořád v Normal/Luxury.
 
 ---
 
 ## 📋 Požadavky
 
 - **NIBE** s registry BT6 (40014), BT7 (40013) a zápisem do **47041** (ověřeno na VVM 320)
-- **nibepi** nebo jiný bridge publikující registry do MQTT
+- **nibepi** nebo jiný bridge publikující registry do MQTT – zápis režimu jde přes MQTT,
+  **s integrací NIBE / myUplink VV-AI zatím nefunguje**
 - **Home Assistant** + MQTT integrace
 - **pyscript** (HACS → Integrace → *Pyscript Python scripting*)
 - senzor **ceny elektřiny** za kWh, např. [CZ Energy Spot Prices](https://github.com/rnovacek/homeassistant_cz_energy_spot_prices)

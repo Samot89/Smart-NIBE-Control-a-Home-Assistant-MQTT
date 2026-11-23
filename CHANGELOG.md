@@ -6,6 +6,23 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [v4.11.1] – 2026-11-23
+
+### Fixed (VV-AI pyscript)
+- Hot water mode (47041) was written every 15 min even when unchanged (96× a day). Now only on
+  a change, otherwise at most every 6 h (`HW_REFRESH_H`) – saves the NIBE EEPROM.
+- After a gap in data (HA restart / outage) the BT6 drop over several hours was learned as one
+  usage. Now only consecutive hours are learned.
+- Usage was stored one hour late (a shower at 19:10 went to the 20:00 slot) and the current hour
+  was not part of the look-ahead. Now stored in the hour it started; look-ahead = this + next 2 h.
+  Already learned profiles shift by one hour – they re-learn within a week or two.
+
+### Docs
+- `docs/vv-ai.md`: price thresholds are in CZK by default (adjust for EUR/SEK); VV-AI writes via
+  MQTT and does not work with the NIBE / myUplink integration yet.
+
+---
+
 ## [v4.11] – 2026-11-23
 
 ### Fixed

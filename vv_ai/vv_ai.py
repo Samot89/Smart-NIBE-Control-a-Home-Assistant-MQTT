@@ -38,6 +38,7 @@ STATUS_TOPIC    = "nibepi/vv_ai/ha_mode"     # posledni rozhodnuti (pro dashboar
 DIAG_TOPIC      = "nibepi/vv_ai/diag"        # diagnostika uceni
 STORE_TOPIC     = "nibepi/vv_ai/profile_store"
 STORE_ENTITY    = "sensor.vv_ai_profil_uloziste"
+STATUS_ENTITY   = "sensor.vv_ai_rozhodnuti"  # MQTT senzor ze STATUS_TOPIC (pamatuje posledni zapis)
 
 # --- Nastaveni: chovani -------------------------------------------------------
 PREHEAT_H        = 2      # kolik hodin dopredu se diva do profilu
@@ -45,6 +46,7 @@ BT7_MIN          = 43.0   # °C, pod tim vzdy Normal
 BT6_MIN          = 42.0   # °C, pod tim vzdy Normal
 DROP_MIN         = 2.0    # °C, minimalni pokles BT6 za hodinu, ktery se pocita jako odber
 FALLBACK         = 1      # rezim pri vypadku dat
+HW_REFRESH_H     = 6      # beze zmeny rezimu se 47041 zapise znovu nejdriv po tolika hodinach (EEPROM)
 
 # Prahy ceny (stejna jednotka jako SPOT_ENTITY, napr. Kc/kWh)
 PRICE_VERY_CHEAP = 0.0    # <= -> Luxury (zaporna/nulova cena)
@@ -106,14 +108,28 @@ def save_profile(prof):
         log.error(f"VV-AI: save_profile CHYBA ({e})")
 
 def send_mode(mode, reason=""):
+    # 47041 se zapisuje jen pri zmene rezimu (nebo jednou za HW_REFRESH_H hodin) – setri EEPROM.
+    # Status (duvod) se publikuje vzdy.
     try:
-        service.call("mqtt", "publish",
-                     topic=HW_TOPIC, payload=str(mode), qos=1, retain=False)
+        last_mode  = None
+        last_write = 0.0
+        try:
+            attrs = state.getattr(STATUS_ENTITY) or {}
+            last_mode  = attrs.get("mode")
+            last_write = float(attrs.get("written") or 0)
+        except Exception:
+            pass
+        now_ts = datetime.now().timestamp()
+        if last_mode != mode or now_ts - last_write >= HW_REFRESH_H * 3600:
+            service.call("mqtt", "publish",
+                         topic=HW_TOPIC, payload=str(mode), qos=1, retain=False)
+            last_write = now_ts
+            log.info(f"VV-AI: -> {MODE_NAMES[mode]} ({reason})")
         service.call("mqtt", "publish",
                      topic=STATUS_TOPIC,
-                     payload=json.dumps({"mode": mode, "name": MODE_NAMES[mode], "reason": reason}),
+                     payload=json.dumps({"mode": mode, "name": MODE_NAMES[mode],
+                                         "reason": reason, "written": last_write}),
                      qos=1, retain=True)
-        log.info(f"VV-AI: -> {MODE_NAMES[mode]} ({reason})")
     except Exception as e:
         log.warning(f"VV-AI: nelze odeslat mode {mode} ({e})")
 
@@ -139,16 +155,21 @@ def vv_ai_learn():
         last_hi  = prof.get("last_hi")
         learned  = False
 
-        # Odber = pokles BT6 od minule hodiny; slot drzi klouzavy prumer poklesu
-        if last_bt6 is not None and last_hi != hi:
+        # Odber = pokles BT6 od minule hodiny; slot drzi klouzavy prumer poklesu.
+        # Uci se jen z navazujicich hodin (po vypadku HA by se pokles za vic hodin
+        # pripsal jedne) a pokles patri hodine, ve ktere zacal (last_hi).
+        if last_bt6 is not None and last_hi is not None and int(last_hi) == (hi - 1) % 168:
+            slot = int(last_hi)
             drop = float(last_bt6) - bt6
             if drop >= DROP_MIN:
-                n     = prof["counts"][hi] + 1
-                old   = prof["profile"][hi]
-                prof["profile"][hi] = old + (drop - old) / n
-                prof["counts"][hi]  = n
+                n     = prof["counts"][slot] + 1
+                old   = prof["profile"][slot]
+                prof["profile"][slot] = old + (drop - old) / n
+                prof["counts"][slot]  = n
                 learned = True
-                log.info(f"VV-AI uceni: slot {hi} pokles {drop:.1f}C prumer={prof['profile'][hi]:.1f}C n={n}")
+                log.info(f"VV-AI uceni: slot {slot} pokles {drop:.1f}C prumer={prof['profile'][slot]:.1f}C n={n}")
+        elif last_bt6 is not None and last_hi != hi:
+            log.info(f"VV-AI uceni: mezera v datech (posledni slot {last_hi}, ted {hi}), neucim")
 
         prof["last_bt6"] = bt6
         prof["last_hi"]  = hi
@@ -189,11 +210,11 @@ def vv_ai_control():
         if bt6 is not None and bt6 < BT6_MIN:
             send_mode(1, f"BT6={bt6:.1f}C < {BT6_MIN}C -> Normal (studena nadrz)"); return
 
-        # Nejvetsi ocekavany odber v pristich PREHEAT_H hodinach
+        # Nejvetsi ocekavany odber v teto a pristich PREHEAT_H hodinach
         prof     = load_profile()
         hi       = hour_of_week()
         max_drop = 0.0
-        for offset in range(1, PREHEAT_H + 1):
+        for offset in range(0, PREHEAT_H + 1):
             future_hi = (hi + offset) % 168
             if prof["profile"][future_hi] > max_drop:
                 max_drop = prof["profile"][future_hi]
