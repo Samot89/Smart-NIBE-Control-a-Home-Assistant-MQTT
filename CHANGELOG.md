@@ -6,6 +6,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [v4.12.2] – 2026-11-23
+
+### Fixed
+- The automation stopped on every run when the weather entity has no hourly forecast (e.g. a
+  template weather): *"does not support action weather.get_forecasts"* is a validation error
+  that `continue_on_error` does not catch. The forecast is now only requested when the entity
+  supports an hourly forecast; otherwise the optional trend helper is used. Reported by Hogster
+  in #12.
+
+---
+
 ## [v4.12.1] – 2026-11-23
 
 ### Removed

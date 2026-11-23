@@ -1,5 +1,5 @@
 blueprint:
-  name: Smart NIBE – Adaptive Heat Curve Control (MQTT/Modbus or myUplink) v4.12.1
+  name: Smart NIBE – Adaptive Heat Curve Control (MQTT/Modbus or myUplink) v4.12.2
   description: |
     Adaptive control of a NIBE heat pump: smoothly adjusts the heat curve offset
     (register 47011) – never switches the compressor on/off.
@@ -296,15 +296,22 @@ trigger:
     minutes: !input run_interval_minutes
 
 action:
-  # Hourly forecast for the forecast trend (weather entities without an hourly
-  # forecast raise an error – ignored, the optional helper is used instead).
-  - service: weather.get_forecasts
-    continue_on_error: true
-    target:
-      entity_id: !input outdoor_weather
-    data:
-      type: hourly
-    response_variable: forecast_resp
+  # Hourly forecast for the forecast trend. Only called when the weather entity supports an
+  # hourly forecast (supported_features bit 2) – otherwise HA raises a validation error that
+  # continue_on_error does not catch (e.g. template weather). Without it the optional helper is used.
+  - variables:
+      forecast_weather: !input outdoor_weather
+  - if:
+      - condition: template
+        value_template: "{{ (state_attr(forecast_weather, 'supported_features') | int(0)) | bitwise_and(2) > 0 }}"
+    then:
+      - service: weather.get_forecasts
+        continue_on_error: true
+        target:
+          entity_id: "{{ forecast_weather }}"
+        data:
+          type: hourly
+        response_variable: forecast_resp
 
   - variables:
       spot_ent: !input spot_price
@@ -594,7 +601,7 @@ action:
           {
             "status": status_text,
             "metadata": {
-              "version": "4.12.1",
+              "version": "4.12.2",
               "timestamp": now().isoformat(),
               "components_count": 7
             },
