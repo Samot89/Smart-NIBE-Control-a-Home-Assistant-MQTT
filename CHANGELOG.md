@@ -6,6 +6,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [v4.12.1] – 2026-11-23
+
+### Removed
+- The ignored *COP sensor* input is gone from the blueprint UI. Automations that still have it
+  set keep working – Home Assistant silently ignores inputs the blueprint no longer defines.
+
+---
+
 ## [v4.12] – 2026-11-23
 
 ### Added

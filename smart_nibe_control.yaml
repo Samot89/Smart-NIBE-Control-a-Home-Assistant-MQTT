@@ -1,5 +1,5 @@
 blueprint:
-  name: Smart NIBE – Adaptive Heat Curve Control (MQTT/Modbus or myUplink) v4.12
+  name: Smart NIBE – Adaptive Heat Curve Control (MQTT/Modbus or myUplink) v4.12.1
   description: |
     Adaptive control of a NIBE heat pump: smoothly adjusts the heat curve offset
     (register 47011) – never switches the compressor on/off.
@@ -82,20 +82,6 @@ blueprint:
             - sensor
             - number
             - input_number
-
-    # ==========================================
-    # COP SENSOR – no longer used since v4.11.2
-    # ==========================================
-    cop_sensor:
-      name: 🔋 COP sensor – no longer used
-      description: >
-        Ignored since v4.11.2 – the COP component was removed (it worked against the price logic
-        and added +0.8 whenever the compressor stopped and the sensor showed 0). Kept only so
-        existing automations keep working – leave it empty.
-      default: none
-      selector:
-        entity:
-          domain: sensor
 
     # ==========================================
     # CONTROL PARAMETERS
@@ -332,13 +318,11 @@ action:
       gain_ent: !input response_gain
       hdo_ent: !input hdo
       last_write_ent: !input last_write_helper
-      cop_ent: !input cop_sensor
       # Optional inputs: `default: none` is the string "none" in YAML, not null,
       # and a cleared selector can give "". Treat all of them as "not configured".
       cheap_set: "{{ cheap_ent not in [none, '', 'none'] }}"
       hdo_set: "{{ hdo_ent not in [none, '', 'none'] }}"
       last_write_set: "{{ last_write_ent not in [none, '', 'none'] }}"
-      cop_set: "{{ cop_ent not in [none, '', 'none'] }}"
       target_temp_fixed: !input target_temp
       target_temp_ent: !input target_temp_entity
       target_temp_set: "{{ target_temp_ent not in [none, '', 'none'] and is_number(states(target_temp_ent)) }}"
@@ -610,7 +594,7 @@ action:
           {
             "status": status_text,
             "metadata": {
-              "version": "4.12",
+              "version": "4.12.1",
               "timestamp": now().isoformat(),
               "components_count": 7
             },

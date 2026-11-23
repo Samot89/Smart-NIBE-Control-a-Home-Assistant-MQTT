@@ -1,6 +1,6 @@
 # 🏠 Smart NIBE Control – Adaptive Heat Pump Control (MQTT/Modbus or myUplink)
 
-[![Version](https://img.shields.io/badge/version-v4.12-blue)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-v4.12.1-blue)](CHANGELOG.md)
 [![Platform](https://img.shields.io/badge/Home%20Assistant-Blueprint-41BDF5?logo=homeassistant)](https://www.home-assistant.io/)
 [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
