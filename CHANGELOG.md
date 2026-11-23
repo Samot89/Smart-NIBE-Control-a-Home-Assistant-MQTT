@@ -6,13 +6,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
-## [Unreleased]
+## [v4.12] – 2026-11-23
 
 ### Added
 - **Minimum offset change when the forecast is stable** (`stable_forecast_min_change`, default 2).
   The dead band used when the forecast trend is between −0.2 and +0.2 °C was hard-coded to 2.
   Setting it to 1 lets one-step corrections through, instead of forcing jumps of 2 that can push
-  degree minutes down to where the immersion heater starts. Default 2 keeps the previous behaviour (#5).
+  degree minutes down to where the immersion heater starts. Default 2 keeps the previous behaviour (#5). Contributed by Hogster in #12.
+
+---
 
 ## [v4.11.2] – 2026-11-23
 

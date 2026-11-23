@@ -1,5 +1,5 @@
 blueprint:
-  name: Smart NIBE – Adaptive Heat Curve Control (MQTT/Modbus or myUplink) v4.11.2
+  name: Smart NIBE – Adaptive Heat Curve Control (MQTT/Modbus or myUplink) v4.12
   description: |
     Adaptive control of a NIBE heat pump: smoothly adjusts the heat curve offset
     (register 47011) – never switches the compressor on/off.
@@ -610,7 +610,7 @@ action:
           {
             "status": status_text,
             "metadata": {
-              "version": "4.11.2",
+              "version": "4.12",
               "timestamp": now().isoformat(),
               "components_count": 7
             },
