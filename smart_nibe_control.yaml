@@ -269,6 +269,8 @@ blueprint:
         Protects against the immersion heater: when degree minutes fall below the threshold, the
         offset is capped until they recover above the release threshold (hysteresis). The cap is
         written even inside the minimum write interval and the dead band. Off = previous behaviour.
+        Check the pump's own degree minute settings first (service menu, often 4.9.3: compressor
+        start and the difference to additional heat) – changing them there may be all you need.
       default: false
       selector:
         boolean: {}
@@ -277,7 +279,8 @@ blueprint:
       name: 🛡️ DM guard – threshold
       description: >
         Cap the offset when degree minutes fall below this. Set it a little above the value where
-        your immersion heater starts (often around −460 = compressor start −60 + addition −400).
+        your immersion heater starts – that value comes from the pump's settings: compressor start
+        + difference to additional heat (e.g. −60 − 400 = −460).
       default: -400
       selector:
         number:

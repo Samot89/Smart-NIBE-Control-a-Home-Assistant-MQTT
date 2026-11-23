@@ -23,7 +23,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - **DM guard with hysteresis** (`dm_guard_*`, off by default): when degree minutes fall below the
   threshold the offset is capped (default −2) until they recover above the release threshold. The
   cap is written even inside the write interval and dead band. Shown in the status
-  (*"DM guard: capped at -2 (DM -430)"*). Idea and data by Hogster (#12).
+  (*"DM guard: capped at -2 (DM -430)"*). Idea and data by Hogster (#12). Helpery.md explains
+  where the heater start comes from (the pump's own degree minute settings) and when changing
+  those is the better fix.
 - Debug payload: `input_sensors.price_list` (entity, source, hours), spot `mode`, DM guard state.
 
 ---

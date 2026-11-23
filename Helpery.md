@@ -51,8 +51,19 @@ By monitoring them, you can:
 - Protect COP and the compressor
 
 **Used in automation for:**
-- DM Guard
-- Limiting the rate of changes
+- Limiting the rate of changes (below −800 the offset moves max. 1 step per write)
+- **DM guard** (v4.13, optional) – caps the offset while DM is low, with hysteresis
+
+**When does the immersion heater start?** That is set **in the heat pump itself**, not in the
+blueprint – service menu *degree minute settings* (F-series / VVM usually 4.9.3, S-series similar):
+- *start compressor*, e.g. −60 DM
+- *difference to start of additional heat*, e.g. 400 → the heater starts at about **−460 DM**
+
+Check these first. If the heater starts too early for you, raising the difference (or limiting /
+blocking the additional heat except for emergencies) in the pump is the cleanest fix and works
+without the blueprint. Use the **DM guard** when you can't or don't want to change the pump
+settings: set its threshold a little above the heater start (e.g. −400 for −460) and the release
+threshold higher (e.g. −200), so the offset doesn't flip back and forth.
 
 ---
 
