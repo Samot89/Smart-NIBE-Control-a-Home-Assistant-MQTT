@@ -1,5 +1,5 @@
 blueprint:
-  name: Smart NIBE – Adaptive Heat Curve Control (MQTT/Modbus or myUplink) v4.10
+  name: Smart NIBE – Adaptive Heat Curve Control (MQTT/Modbus or myUplink) v4.11
   description: |
     Adaptive control of a NIBE heat pump: smoothly adjusts the heat curve offset
     (register 47011) – never switches the compressor on/off.
@@ -259,25 +259,34 @@ blueprint:
     notify_message_type:
       name: 💬 Message for the actions below
       description: >
-        Which text is offered as `{{ nibe_message }}` to the actions after a write.
-      default: history
+        Which parts make up `{{ nibe_message }}` for the actions after a write – one line each,
+        in this order. Each part is also available as its own variable (in brackets).
+      default:
+        - history
       selector:
         select:
+          multiple: true
           options:
-            - label: "Short – time, old → new offset, main reasons"
+            - label: "Short line – time, old → new offset, main reasons (nibe_history_line)"
               value: history
-            - label: "Full status text"
+            - label: "Full status text (nibe_status)"
               value: status
-            - label: "Both (short line + full status)"
-              value: both
+            - label: "Offset change, e.g. 'Offset -2 → -1' (nibe_offset_old / nibe_offset_new)"
+              value: offsets
+            - label: "Calculated value before rounding, e.g. 'Calculated -1.59' (nibe_calculated)"
+              value: calculated
+            - label: "Main reasons (nibe_reasons)"
+              value: reasons
+            - label: "Inputs – outdoor, indoor / target, price (nibe_inputs)"
+              value: inputs
 
     on_write_actions:
       name: 🔔 Actions after a write (optional)
       description: >
         Runs after every offset write – e.g. a notify service, a Telegram message or your own
-        script. Available variables: `{{ nibe_message }}` (selected above), `{{ nibe_status }}`
-        (full status text), `{{ nibe_history_line }}` (short line), `{{ nibe_offset_old }}`,
-        `{{ nibe_offset_new }}`, `{{ nibe_reasons }}`. Example message: `{{ nibe_message }}`.
+        script. Available variables: `{{ nibe_message }}` (parts selected above), `{{ nibe_status }}`,
+        `{{ nibe_history_line }}`, `{{ nibe_offset_old }}`, `{{ nibe_offset_new }}`,
+        `{{ nibe_calculated }}`, `{{ nibe_reasons }}`, `{{ nibe_inputs }}`. Example message: `{{ nibe_message }}`.
       default: []
       selector:
         action: {}
@@ -353,6 +362,14 @@ action:
       price_now: "{{ states(spot_ent) | float(0) }}"
       weather_state: "{{ states(weather_ent) }}"
       temp_outdoor: "{{ [[-30, temp_outdoor_raw | float(0)] | max, 30] | min }}"
+      # Sensors that are unavailable right now (e.g. myUplink dropping out). Their fallback
+      # values would distort the calculation, so the offset is held until they are back.
+      missing_inputs: >-
+        {{ [
+          'spot price' if not is_number(states(spot_ent)) else '',
+          'indoor temperature' if not is_number(states(in_temp_ent)) else '',
+          'outdoor temperature' if not is_number(state_attr(weather_ent, 'temperature')) else ''
+        ] | select | join(', ') }}
       hour_index: "{{ now().hour }}"
       now_timestamp: "{{ now().timestamp() }}"
 
@@ -507,7 +524,8 @@ action:
         {% set current = curr_offset | int %}
         {% set diff = target - current %}
         {% set step = max_step | int %}
-        {% if diff > step %}{{ current + step }}
+        {% if missing_inputs | trim %}{{ current }}
+        {% elif diff > step %}{{ current + step }}
         {% elif diff < -step %}{{ current - step }}
         {% else %}{{ target }}{% endif %}
 
@@ -555,7 +573,7 @@ action:
         {%- elif write_pending %}waiting for NIBE to confirm {{ last_written_offset | int }} (written {{ minutes_since_hist_write | int }} min ago)
         {%- elif offset_change | int == 0 %}
         {%- elif hdo_set and not is_state(hdo_ent, 'on') %}HDO blocking
-        {%- elif states(spot_ent) == 'unavailable' %}spot price unavailable
+        {%- elif missing_inputs | trim %}unavailable: {{ missing_inputs | trim }}
         {%- elif offset_change | int | abs < effective_min_change | int %}change below dead band ({{ effective_min_change | int }})
         {%- elif not (allow_write_by_time or comfort_override) %}write interval {{ minutes_since_write | float | round(0) | int }}/{{ min_write_interval_min | int }} min
         {%- endif %}
@@ -578,11 +596,13 @@ action:
       status_text: >-
         {% set r = status_reasons | trim %}
         {% set b = block_reason | trim %}
+        {% set c = ' (calculated ' ~ (raw_calc | float | round(2)) ~ ')' %}
         {% if not offset_available %}Waiting – current offset unavailable
+        {%- elif missing_inputs | trim %}Holding at {{ curr_offset | int }} – unavailable: {{ missing_inputs | trim }}
         {%- elif write_pending %}Offset {{ last_written_offset | int }} written {{ minutes_since_hist_write | int }} min ago – waiting for NIBE to report it (still shows {{ curr_offset | int }})
-        {%- elif offset_change | int == 0 %}Holding at {{ curr_offset | int }}{{ ': ' ~ r if r else '' }}
-        {%- elif b %}Holding at {{ curr_offset | int }} (target {{ offset_final | int }}) – {{ b }}{{ ' · ' ~ r if r else '' }}
-        {%- else %}{{ 'Raising' if offset_change | int > 0 else 'Lowering' }} offset {{ curr_offset | int }} → {{ offset_final | int }}{{ ': ' ~ r if r else '' }}
+        {%- elif offset_change | int == 0 %}Holding at {{ curr_offset | int }}{{ c }}{{ ': ' ~ r if r else '' }}
+        {%- elif b %}Holding at {{ curr_offset | int }} (target {{ offset_final | int }}, calculated {{ raw_calc | float | round(2) }}) – {{ b }}{{ ' · ' ~ r if r else '' }}
+        {%- else %}{{ 'Raising' if offset_change | int > 0 else 'Lowering' }} offset {{ curr_offset | int }} → {{ offset_final | int }}{{ c }}{{ ': ' ~ r if r else '' }}
         {%- endif %}
 
   # MQTT DEBUG PUBLISH (optional – ignored when MQTT is not set up, e.g. myUplink-only)
@@ -599,7 +619,7 @@ action:
           {
             "status": status_text,
             "metadata": {
-              "version": "4.10",
+              "version": "4.11",
               "timestamp": now().isoformat(),
               "components_count": 8
             },
@@ -691,6 +711,8 @@ action:
               "will_write": will_write,
               "write_pending": write_pending,
               "blocked_by": block_reason | trim,
+              "missing_inputs": missing_inputs | trim,
+              "calculated": raw_calc | float | round(2),
               "write_method": write_method,
               "checks": {
                 "sensors_available": states(spot_ent) != 'unavailable' and states(weather_ent) != 'unavailable',
@@ -706,6 +728,8 @@ action:
     value_template: "{{ not hdo_set or is_state(hdo_ent, 'on') }}"
   - condition: template
     value_template: "{{ states(spot_ent) != 'unavailable' }}"
+  - condition: template
+    value_template: "{{ not (missing_inputs | trim) }}"
   - condition: template
     value_template: "{{ offset_available }}"
   - condition: template
@@ -773,9 +797,25 @@ action:
       nibe_offset_old: "{{ curr_offset | int }}"
       nibe_offset_new: "{{ offset_final | int }}"
       nibe_reasons: "{{ status_reasons | trim }}"
-      nibe_message: |-
-        {% if notify_type == 'status' %}{{ status_text | trim }}{% elif notify_type == 'both' %}{{ history_entry }}
-        {{ status_text | trim }}{% else %}{{ history_entry }}{% endif %}
+      nibe_calculated: "{{ raw_calc | float | round(2) }}"
+      nibe_inputs: >-
+        {{ 'Outdoor ' ~ (temp_outdoor | float | round(1)) ~ ' °C, indoor ' ~ (temp_indoor | float | round(1))
+           ~ ' °C (target ' ~ ((target_temp_var | float + bias_value | float) | round(1)) ~ ' °C), price '
+           ~ (price_now | float | round(2)) }}
+      nibe_message: >-
+        {% set t = notify_type %}
+        {% if t is string %}{% set t = ['history', 'status'] if t == 'both' else [t] %}{% endif %}
+        {% set parts = {
+          'history': history_entry,
+          'status': status_text | trim,
+          'offsets': 'Offset ' ~ (curr_offset | int) ~ ' → ' ~ (offset_final | int),
+          'calculated': 'Calculated ' ~ (raw_calc | float | round(2)),
+          'reasons': status_reasons | trim,
+          'inputs': nibe_inputs
+        } %}
+        {% set ns = namespace(l=[]) %}
+        {% for k in (t if t is iterable else ['history']) %}{% if k in parts and parts[k] %}{% set ns.l = ns.l + [parts[k]] %}{% endif %}{% endfor %}
+        {{ (ns.l if ns.l else [history_entry]) | join('\n') }}
   - choose: []
     default: !input on_write_actions
 

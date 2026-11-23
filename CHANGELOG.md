@@ -6,6 +6,24 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [v4.11] – 2026-11-23
+
+### Fixed
+- **Short offset jumps while a sensor is unavailable** (#11): when the spot price, indoor
+  temperature or the weather entity's temperature was briefly unavailable (e.g. myUplink dropping
+  out), fallback values were used and the calculated offset could jump for one run – and even be
+  written. The offset is now held and the status says *"Holding at -2 – unavailable: indoor
+  temperature"*. Debug payload: `decision.missing_inputs`.
+
+### Added
+- Status shows the calculated value before rounding (#7), e.g. *"Holding at -2 (calculated -1.59)"*.
+  Also in the debug payload as `decision.calculated`.
+- Notifications (#10): *💬 Message for the actions below* is now a multi-select – combine the short
+  line, full status, offset change, calculated value, reasons and inputs (outdoor, indoor / target,
+  price). New variables `nibe_calculated` and `nibe_inputs`. Existing automations keep working.
+
+---
+
 ## [v4.10] – 2026-11-22
 
 ### Added

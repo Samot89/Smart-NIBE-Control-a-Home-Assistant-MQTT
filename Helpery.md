@@ -189,9 +189,11 @@ a *Notifications* action and use `{{ nibe_message }}` as the message. In YAML:
     message: "{{ nibe_message }}"
 ```
 
-Available variables: `nibe_message` (short line / full status / both – chosen in
-*💬 Message for the actions below*), `nibe_status`, `nibe_history_line`, `nibe_offset_old`,
-`nibe_offset_new`, `nibe_reasons`.
+`nibe_message` is built from the parts you tick in *💬 Message for the actions below* (v4.11,
+one line each): short line, full status, offset change, calculated value, reasons, inputs.
+Each part is also available on its own: `nibe_history_line`, `nibe_status`, `nibe_offset_old`,
+`nibe_offset_new`, `nibe_calculated`, `nibe_reasons`, `nibe_inputs` – e.g. a short message to
+the phone and a detailed one to Telegram.
 
 ---
 
