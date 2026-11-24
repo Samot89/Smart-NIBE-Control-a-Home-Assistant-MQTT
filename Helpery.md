@@ -51,24 +51,111 @@ By monitoring them, you can:
 - Protect COP and the compressor
 
 **Used in automation for:**
-- DM Guard
-- Limiting the rate of changes
+- Limiting the rate of changes (below −800 the offset moves max. 1 step per write)
+- **DM guard** (v4.13, optional) – caps the offset while DM is low, with hysteresis
+
+**When does the immersion heater start?** That is set **in the heat pump itself**, not in the
+blueprint – service menu *degree minute settings* (F-series / VVM usually 4.9.3, S-series similar):
+- *start compressor*, e.g. −60 DM
+- *difference to start of additional heat*, e.g. 400 → the heater starts at about **−460 DM**
+
+Check these first. If the heater starts too early for you, raising the difference (or limiting /
+blocking the additional heat except for emergencies) in the pump is the cleanest fix and works
+without the blueprint. Use the **DM guard** when you can't or don't want to change the pump
+settings: set its threshold a little above the heater start (e.g. −400 for −460) and the release
+threshold higher (e.g. −200), so the offset doesn't flip back and forth.
+
+> ℹ️ The blueprint keeps no state between runs, so the hysteresis is taken from the current offset:
+> the cap applies when DM is below the threshold, **or** when DM is below the release threshold and
+> the offset is already at or below the cap. In practice it means *"don't raise the offset above the
+> cap while DM is below the release threshold"* – so the cap can also show up at e.g. DM −250 when the
+> offset was already −2 because of price or indoor temperature. That is intended (a bit safer).
+
+> ⚠️ The DM guard only stops the **blueprint** from pushing DM down. When the compressor already runs
+> at full capacity and the house needs more heat than it can deliver (e.g. cold brine), DM keeps
+> falling and the heater starts anyway – then only the pump's own degree minute settings help.
 
 ---
 
-### 🔹 Spot price sensor
+### 🔹 Spot price sensor and price list
 
-**Purpose:**
-Provides the current electricity price.
+**Spot price sensor** – the current electricity price (state, currency/kWh).
 
-**Requirements:**
-- Must have a current price
-- Ideally also a `today[]` attribute for look-ahead
+**Price list** – today's (and tomorrow's) prices, used for pre-heating and the **relative spot mode**
+(v4.13). The blueprint reads it from the spot price sensor, or from the optional
+*📋 Price list sensor*. The format is recognised automatically; 15-minute prices are averaged per hour.
+
+| Integration | Where the prices are | Status |
+|---|---|---|
+| CZ Energy Spot Prices | timestamp attributes (`2026-11-23T00:00:00+01:00: 4.58`) | ✅ tested (live) |
+| Nord Pool – core integration | **no price list** → use the helper sensor below | ✅ tested (real data, SE3) |
+| Own template sensor with `today` / `tomorrow` lists | `today`, `tomorrow` | ✅ tested |
+| Nord Pool (HACS) | `raw_today` / `today` (15-min prices) | ✅ tested (real data, SE3) |
+| ENTSO-e (HACS) | `prices_today` / `prices_tomorrow` | 🧪 **testers wanted** |
+| Energi Data Service (HACS) | `raw_today` / `today` | 🧪 **testers wanted** |
+| Tibber, Octopus, Amber, … | not built in – a helper sensor with `today` / `tomorrow` lists works | 🧪 **testers wanted** |
+
+> 🧪 **Testers wanted:** the formats marked 🧪 were implemented from the integrations' source code,
+> not tested on real data. If you use one of them, please check the debug payload
+> (`input_sensors.price_list`: `source`, `hours_today` should be 24) and report in
+> [issue #5](https://github.com/Samot89/Smart-NIBE-Control-HA-Modbus-MQTT-myUplink/issues/5) – thanks!
+
+#### Price list for the core Nord Pool integration
+
+The core Nord Pool integration only exposes the current / next / min / max price. The full day is
+available through the action `nordpool.get_prices_for_date`. This trigger-based template sensor
+calls it once an hour (not on every blueprint run) and stores the prices in currency/kWh:
+
+```yaml
+template:
+  - trigger:
+      - trigger: time_pattern
+        minutes: 1
+      - trigger: homeassistant
+        event: start
+    action:
+      - action: nordpool.get_prices_for_date
+        continue_on_error: true
+        data:
+          config_entry: YOUR_NORD_POOL_CONFIG_ENTRY_ID
+          date: "{{ now().date() }}"
+        response_variable: np_today
+      - action: nordpool.get_prices_for_date
+        continue_on_error: true
+        data:
+          config_entry: YOUR_NORD_POOL_CONFIG_ENTRY_ID
+          date: "{{ (now() + timedelta(days=1)).date() }}"
+        response_variable: np_tomorrow
+    sensor:
+      - name: "NIBE price list"
+        unique_id: nibe_price_list
+        icon: mdi:format-list-numbered
+        # number of price slots for today (96 = 15-min prices)
+        state: "{{ (np_today.values() | first | default([])) | length if np_today is mapping else 0 }}"
+        attributes:
+          # Nord Pool returns currency/MWh – converted to currency/kWh like the price sensors
+          raw_today: >
+            {% set ns = namespace(l=[]) %}
+            {% for e in ((np_today.values() | first | default([])) if np_today is mapping else []) %}
+              {% set ns.l = ns.l + [{'start': e.start, 'price': (e.price / 1000) | round(5)}] %}
+            {% endfor %}
+            {{ ns.l }}
+          raw_tomorrow: >
+            {% set ns = namespace(l=[]) %}
+            {% for e in ((np_tomorrow.values() | first | default([])) if np_tomorrow is mapping else []) %}
+              {% set ns.l = ns.l + [{'start': e.start, 'price': (e.price / 1000) | round(5)}] %}
+            {% endfor %}
+            {{ ns.l }}
+```
+
+Replace `YOUR_NORD_POOL_CONFIG_ENTRY_ID` – easiest: *Developer tools → Actions →
+Nord Pool: Get prices for date*, pick your entry, switch to YAML mode and copy the `config_entry`.
+Then select `sensor.nibe_price_list` as *📋 Price list sensor* in the blueprint (the spot price
+sensor stays your Nord Pool current price sensor).
 
 **Used for:**
-- Cost optimization
+- Spot price influence (absolute or relative)
 - Pre-heating logic
-- Economic decisions
 
 ---
 

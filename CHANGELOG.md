@@ -6,6 +6,35 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [v4.13] – 2026-11-23
+
+### Added
+- **Relative spot mode** (`spot_mode: relative`, `spot_k`, #5): the spot price influence compares
+  the current price with today's average (`−k × (price − mean) / mean`, limited to ±1.5), so it
+  works with any currency and price level. Default stays `absolute`. Falls back to the absolute
+  formula when fewer than 20 hourly prices are known. In relative mode pre-heating uses "cheaper
+  than today's average" instead of the fixed 2.5.
+  `spot_reference` chooses what to compare with: *today's average* (default) or *upcoming prices* –
+  the average of the known prices for the next 24 h (incl. tomorrow once published), better for
+  moving heat to cheaper hours ahead; falls back to today's average with fewer than 8 hours.
+  Idea by TheMiZMiZ (#14).
+- **Price list from more integrations:** CZ Energy Spot Prices (timestamp attributes – pre-heating
+  never worked with it before), Nord Pool HACS, ENTSO-e, Energi Data Service and any sensor with
+  `today` / `tomorrow` lists. 15-minute prices are averaged per hour. New optional input
+  *📋 Price list sensor*. Helpery.md has a helper sensor for the core Nord Pool integration
+  (`nordpool.get_prices_for_date`, refreshed hourly, MWh → kWh).
+  Tested on real data: CZ Energy Spot Prices, core Nord Pool (helper), Nord Pool HACS (15-min).
+  **Testers wanted** for ENTSO-e, Energi Data Service and Tibber & co.
+- **DM guard with hysteresis** (`dm_guard_*`, off by default): when degree minutes fall below the
+  threshold the offset is capped (default −2) until they recover above the release threshold. The
+  cap is written even inside the write interval and dead band. Shown in the status
+  (*"DM guard: capped at -2 (DM -430)"*). Idea and data by Hogster (#12). Helpery.md explains
+  where the heater start comes from (the pump's own degree minute settings) and when changing
+  those is the better fix.
+- Debug payload: `input_sensors.price_list` (entity, source, hours), spot `mode`, DM guard state.
+
+---
+
 ## [v4.12.2] – 2026-11-23
 
 ### Fixed
