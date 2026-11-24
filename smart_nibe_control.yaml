@@ -293,6 +293,9 @@ blueprint:
       description: >
         Keep the cap until degree minutes are back above this (hysteresis – must be higher than the
         threshold). Without hysteresis the offset flips back and forth and pushes DM down again.
+        Note: the blueprint has no memory, so this works as "don't raise the offset above the cap
+        while DM is below the release threshold" – if the offset is already at or below the cap
+        for other reasons, the cap also applies between the two thresholds (e.g. at DM −250).
       default: -200
       selector:
         number:

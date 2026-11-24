@@ -65,6 +65,12 @@ without the blueprint. Use the **DM guard** when you can't or don't want to chan
 settings: set its threshold a little above the heater start (e.g. −400 for −460) and the release
 threshold higher (e.g. −200), so the offset doesn't flip back and forth.
 
+> ℹ️ The blueprint keeps no state between runs, so the hysteresis is taken from the current offset:
+> the cap applies when DM is below the threshold, **or** when DM is below the release threshold and
+> the offset is already at or below the cap. In practice it means *"don't raise the offset above the
+> cap while DM is below the release threshold"* – so the cap can also show up at e.g. DM −250 when the
+> offset was already −2 because of price or indoor temperature. That is intended (a bit safer).
+
 ---
 
 ### 🔹 Spot price sensor and price list
