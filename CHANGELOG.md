@@ -6,6 +6,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [v4.14.1] – 2026-11-24
+
+### Changed
+- Status: the parts now add up to the calculated value – up to 3 strongest components are shown,
+  the rest is summed up as *"other N ±x.xx"* (e.g. *"house 1.7 °C above target -2.20, other 3 +0.23"*
+  for a calculated −1.97). All values with 2 decimals (#15).
+
+---
+
 ## [v4.14] – 2026-11-24
 
 ### Added
