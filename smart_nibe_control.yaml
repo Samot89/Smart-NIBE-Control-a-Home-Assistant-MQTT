@@ -1,5 +1,5 @@
 blueprint:
-  name: Smart NIBE – Adaptive Heat Curve Control (MQTT/Modbus or myUplink) v4.13
+  name: Smart NIBE – Adaptive Heat Curve Control (MQTT/Modbus or myUplink) v4.14
   description: |
     Adaptive control of a NIBE heat pump: smoothly adjusts the heat curve offset
     (register 47011) – never switches the compressor on/off.
@@ -279,6 +279,20 @@ blueprint:
           max: 240
           step: 5
 
+    sensor_max_age_minutes:
+      name: 🧯 Sensor watchdog – max. age (minutes)
+      description: >
+        A sensor that has not reported for this long is treated as unavailable and the offset is
+        held (e.g. a dead battery that keeps showing the last value). Applies to the spot price,
+        indoor temperature, degree minutes and the weather entity. Out-of-range values (indoor
+        outside 5–35 °C, outdoor outside −45…45 °C) are always treated as unavailable. 0 = no age check.
+      default: 360
+      selector:
+        number:
+          min: 0
+          max: 1440
+          step: 30
+
     dm_guard_enable:
       name: 🛡️ DM guard – cap the offset when degree minutes drop
       description: >
@@ -484,14 +498,29 @@ action:
       price_now: "{{ states(spot_ent) | float(0) }}"
       weather_state: "{{ states(weather_ent) }}"
       temp_outdoor: "{{ [[-30, temp_outdoor_raw | float(0)] | max, 30] | min }}"
-      # Sensors that are unavailable right now (e.g. myUplink dropping out). Their fallback
-      # values would distort the calculation, so the offset is held until they are back.
+      # Sensors that are unavailable, out of range or stale (not reported for sensor_max_age).
+      # Their fallback values would distort the calculation, so the offset is held until they are back.
+      sensor_max_age: !input sensor_max_age_minutes
       missing_inputs: >-
-        {{ [
-          'spot price' if not is_number(states(spot_ent)) else '',
-          'indoor temperature' if not is_number(states(in_temp_ent)) else '',
-          'outdoor temperature' if not is_number(state_attr(weather_ent, 'temperature')) else ''
-        ] | select | join(', ') }}
+        {% set age = sensor_max_age | int(0) %}
+        {% set ns = namespace(m=[]) %}
+        {% for name, e, lo, hi, val in [
+          ['spot price', spot_ent, none, none, none],
+          ['indoor temperature', in_temp_ent, 5, 35, none],
+          ['degree minutes', dm_ent, -5000, 500, none],
+          ['outdoor temperature', weather_ent, -45, 45, 'temperature']
+        ] %}
+          {% set st = states[e] if e is string and '.' in e else none %}
+          {% set v = (st.attributes.get(val) if val else st.state) if st is not none else none %}
+          {% if st is none or not is_number(v) %}{% set ns.m = ns.m + [name] %}
+          {% elif lo is not none and (v | float < lo or v | float > hi) %}{% set ns.m = ns.m + [name ~ ' out of range (' ~ v ~ ')'] %}
+          {% elif age > 0 %}
+            {% set seen = st.last_reported if st.last_reported is defined and st.last_reported else st.last_updated %}
+            {% set mins = ((now() - seen).total_seconds() / 60) | round(0) | int %}
+            {% if mins > age %}{% set ns.m = ns.m + [name ~ ' stale (' ~ mins ~ ' min)'] %}{% endif %}
+          {% endif %}
+        {% endfor %}
+        {{ ns.m | join(', ') }}
       hour_index: "{{ now().hour }}"
       now_timestamp: "{{ now().timestamp() }}"
 
@@ -768,7 +797,7 @@ action:
           {
             "status": status_text,
             "metadata": {
-              "version": "4.13",
+              "version": "4.14",
               "timestamp": now().isoformat(),
               "components_count": 7
             },

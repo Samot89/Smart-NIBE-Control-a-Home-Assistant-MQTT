@@ -6,6 +6,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [v4.14] – 2026-11-24
+
+### Added
+- **Sensor watchdog:** a sensor is also treated as unavailable (offset held, reason in the status)
+  when it is **out of range** (indoor outside 5–35 °C, outdoor outside −45…45 °C) or **stale** – not
+  reported for longer than *🧯 Sensor watchdog – max. age* (default 6 h, 0 = off), e.g. a dead
+  battery that keeps showing the last value. Uses `last_reported` (falls back to `last_updated`).
+- **Degree minutes** are now checked as well: an unavailable DM sensor holds the offset instead of
+  silently using 0 (which disabled the DM step limit and the DM guard).
+- Helpery.md: **automation watchdog** – a separate automation that sets a safe offset and notifies
+  you when Smart NIBE stops running (switched off, failing, HA problems), so a high offset can't stay
+  in the pump for days. Plus an overview of all built-in safety checks.
+
+---
+
 ## [v4.13] – 2026-11-24
 
 ### Added

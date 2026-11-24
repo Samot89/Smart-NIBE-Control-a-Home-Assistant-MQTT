@@ -284,6 +284,75 @@ the phone and a detailed one to Telegram.
 
 ---
 
+### 🔹 Safety: sensor watchdog and automation watchdog (v4.14)
+
+**What the blueprint already does on its own** – it never writes when something looks wrong and
+holds the current offset instead (shown in the status, e.g. *"Holding at -1 – unavailable: indoor
+temperature stale (420 min)"*):
+- spot price, indoor temperature, degree minutes or the weather temperature **unavailable**
+- **out of range** – indoor outside 5–35 °C, outdoor outside −45…45 °C (broken sensor)
+- **stale** – not reported for longer than *🧯 Sensor watchdog – max. age* (default 6 h), e.g. a
+  sensor with a dead battery that keeps showing its last value
+- current offset unavailable, new offset not yet confirmed by the pump (myUplink delay)
+- plus the limits: min/max offset, max. 2 steps per write, dead band, minimum write interval
+
+And the heat pump keeps all its own protections – the blueprint only shifts the curve within your limits.
+
+**What the blueprint can't do: notice that it stopped running itself.** If the automation is switched
+off, keeps failing or Home Assistant had a problem, the last written offset simply stays in the pump –
+possibly a high one from a cheap night. This separate automation watches it, sets a safe offset and
+notifies you:
+
+```yaml
+alias: Smart NIBE – watchdog
+description: Sets a safe heat curve offset and notifies when Smart NIBE stops running.
+mode: single
+triggers:
+  - trigger: time_pattern
+    minutes: "/10"
+variables:
+  smart_nibe: automation.smart_nibe           # your Smart NIBE automation
+  offset_entity: number.heating_offset        # the "Current NIBE offset" entity
+  safe_offset: 0
+  max_silence_min: 30                         # Smart NIBE runs every 2 min by default
+conditions:
+  - condition: template
+    value_template: >
+      {% set lt = state_attr(smart_nibe, 'last_triggered') %}
+      {{ states(smart_nibe) in ['off', 'unavailable'] or lt is none
+         or (now() - lt).total_seconds() > max_silence_min * 60 }}
+  - condition: template
+    value_template: "{{ states(offset_entity) | int(99) != safe_offset }}"
+actions:
+  # myUplink / NIBE integration: set the offset entity directly
+  - action: number.set_value
+    target:
+      entity_id: "{{ offset_entity }}"
+    data:
+      value: "{{ safe_offset }}"
+  # MQTT / NibePi instead: replace the action above with
+  # - action: mqtt.publish
+  #   data:
+  #     topic: nibe/modbus/47011/set
+  #     payload: "{{ safe_offset }}"
+  - action: notify.notify                     # or e.g. notify.mobile_app_your_phone
+    data:
+      title: Smart NIBE watchdog
+      message: >
+        Smart NIBE has not run for {{ max_silence_min }} min (or is switched off) –
+        heat curve offset set to {{ safe_offset }}.
+```
+
+- It writes and notifies **once** – the second condition stops it as soon as the offset is at the
+  safe value.
+- If you sometimes switch Smart NIBE off **on purpose** (manual control), remove
+  `states(smart_nibe) in ['off', 'unavailable'] or` from the first condition, otherwise the
+  watchdog resets your manual offset.
+- It can't catch a run that starts but fails half-way (`last_triggered` is still updated) – the
+  status / trace of the automation shows those.
+
+---
+
 ### 🔹 Optional: HDO / grid blocking
 
 `binary_sensor.hdo`
