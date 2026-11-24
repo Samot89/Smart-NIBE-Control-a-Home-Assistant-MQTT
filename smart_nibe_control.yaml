@@ -69,14 +69,30 @@ blueprint:
     spot_k:
       name: ⚖️ Relative spot strength
       description: >
-        Only for the relative mode: offset change for a price 100 % above / below today's average,
-        limited to ±1.5. With 1.0 a price 30 % above average lowers the offset by 0.3.
+        Only for the relative mode: offset change for a price 100 % above / below the reference
+        average, limited to ±1.5. With 1.0 a price 30 % above average lowers the offset by 0.3.
       default: 1.0
       selector:
         number:
           min: 0.1
           max: 5
           step: 0.1
+
+    spot_reference:
+      name: ⚖️ Relative mode – compare with
+      description: >
+        Only for the relative mode. *Today's average* – all of today's prices. *Upcoming prices* –
+        the average of the known prices from now on (up to 24 h, includes tomorrow once it is
+        published, ~13:00 CET): better for moving heat to the cheaper hours ahead. With fewer than
+        8 upcoming hours today's average is used.
+      default: today
+      selector:
+        select:
+          options:
+            - label: Today's average
+              value: today
+            - label: Upcoming prices (next 24 h)
+              value: upcoming
 
     degree_minutes:
       name: 🌡️ Degree Minutes sensor
@@ -457,6 +473,7 @@ action:
       dm_cap_val: !input dm_guard_cap
       spot_mode: !input spot_mode
       spot_k: !input spot_k
+      spot_ref: !input spot_reference
       price_list_input: !input price_list_sensor
       # Integrations like myUplink make their entities unavailable for a while after a
       # write – never compute or write from an unknown current offset.
@@ -554,6 +571,16 @@ action:
         {% set t = today_prices_list %}
         {% set tm = tomorrow_prices_list %}
         {{ (t + tm) if (t is iterable and tm is iterable) else (t if t is iterable else []) }}
+      # Reference for the relative mode: today's average or the average of the upcoming prices
+      upcoming_prices: >
+        {% set a = all_prices if all_prices is iterable else [] %}
+        {% set h = hour_index | int %}
+        {{ a[h:h + 24] | select('number') | list }}
+      ref_upcoming: "{{ spot_ref == 'upcoming' and upcoming_prices | length >= 8 }}"
+      ref_price: >
+        {% if ref_upcoming %}{{ ((upcoming_prices | sum) / (upcoming_prices | length)) | round(4) }}
+        {% else %}{{ day_mean_price }}{% endif %}
+      ref_label: "{{ ('next ' ~ (upcoming_prices | length) ~ ' h') if ref_upcoming else 'today' }}"
       preheat_price: >
         {% set idx = (hour_index | int) + (preheat_look_ahead | int) %}
         {% if all_prices is iterable and all_prices | length > idx %}
@@ -563,7 +590,7 @@ action:
   - variables:
       # 1. PREHEAT BONUS
       preheat_bonus: >
-        {% set cheap_now = (price_now | float < day_mean_price | float) if spot_relative_used else (price_now | float < 2.5) %}
+        {% set cheap_now = (price_now | float < ref_price | float) if spot_relative_used else (price_now | float < 2.5) %}
         {% if preheat_price | float > (price_now | float * 1.3) and cheap_now %}
           1.5
         {% else %}0.0{% endif %}
@@ -607,7 +634,7 @@ action:
       # 7. SPOT PRICE INFLUENCE – absolute (v4.4) or relative to today's average (v4.13)
       spot_influence_raw: >
         {% if spot_relative_used %}
-          {% set mean = day_mean_price | float %}
+          {% set mean = ref_price | float %}
           {% set rel = (price_now | float - mean) / ([mean | abs, 0.01] | max) %}
           {{ [[-(spot_k | float) * rel, 1.5] | min, -1.5] | max | round(3) }}
         {% else %}
@@ -703,7 +730,7 @@ action:
       status_reasons: >-
         {% set items = [
           [spot_influence_raw | float, ('cheap' if spot_influence_raw | float > 0 else 'expensive') ~ ' electricity (' ~ (price_now | float | round(2))
-            ~ ((', ' ~ ('%+d' | format(((price_now | float - day_mean_price | float) / ([day_mean_price | float | abs, 0.01] | max) * 100) | round(0) | int)) ~ ' % vs today') if spot_relative_used else '') ~ ')'],
+            ~ ((', ' ~ ('%+d' | format(((price_now | float - ref_price | float) / ([ref_price | float | abs, 0.01] | max) * 100) | round(0) | int)) ~ ' % vs ' ~ ref_label) if spot_relative_used else '') ~ ')'],
           [equi_shift | float, 'outdoor ' ~ (temp_outdoor | float | round(1)) ~ ' °C'],
           [indoor_correction | float * gain_value | float, 'house ' ~ (temp_diff | float | abs | round(1)) ~ ' °C ' ~ ('below' if temp_diff | float < 0 else 'above') ~ ' target'],
           [cheap_block_bonus | float, 'cheapest 6h block'],
@@ -753,7 +780,7 @@ action:
             },
             "input_sensors": {
               "spot_price": {"value": price_now | round(3), "unit": "currency/kWh"},
-              "price_list": {"entity": price_ent, "source": price_source, "hours_today": price_hours_today | int, "hours_tomorrow": tomorrow_prices_list | select('number') | list | length, "today_mean": day_mean_price},
+              "price_list": {"entity": price_ent, "source": price_source, "hours_today": price_hours_today | int, "hours_tomorrow": tomorrow_prices_list | select('number') | list | length, "today_mean": day_mean_price, "reference": ref_label, "reference_price": ref_price},
               "outdoor_temperature": {"value": temp_outdoor | round(2), "weather_state": weather_state},
               "indoor_temperature": {"value": temp_indoor | round(2), "diff_from_target": temp_diff | round(3)},
               "target_temperature": {"value": target_temp_var | float | round(2), "bias": bias_value | float | round(2), "source": target_temp_ent if target_temp_set else "fixed"},
@@ -767,7 +794,7 @@ action:
                   "mode": "relative" if spot_relative_used else "absolute",
                   "mode_selected": spot_mode,
                   "formula": ("-k × (price − mean) / mean, k=" ~ spot_k ~ ", ±1.5") if spot_relative_used else "(-0.3 × price) + 1.5",
-                  "calculation": ("-" ~ spot_k ~ " × (" ~ (price_now | round(2)) ~ " − " ~ (day_mean_price | float | round(2)) ~ ") / " ~ (day_mean_price | float | round(2))) if spot_relative_used else ("(-0.3 × " ~ (price_now | round(2)) ~ ") + 1.5"),
+                  "calculation": ("-" ~ spot_k ~ " × (" ~ (price_now | round(2)) ~ " − " ~ (ref_price | float | round(2)) ~ ") / " ~ (ref_price | float | round(2)) ~ " [" ~ ref_label ~ "]") if spot_relative_used else ("(-0.3 × " ~ (price_now | round(2)) ~ ") + 1.5"),
                   "percent_of_total": ((spot_influence / raw_calc * 100) if raw_calc != 0 else 0) | round(1)
                 },
                 "2_equithermal_shift": {

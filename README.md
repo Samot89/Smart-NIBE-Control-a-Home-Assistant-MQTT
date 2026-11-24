@@ -66,6 +66,8 @@ works with any currency and price level:
 ```
 spot_influence = −k × (price − today's average) / today's average      (limited to ±1.5)
 ```
+The average can be today's (default) or that of the **upcoming prices** (next 24 h, incl. tomorrow
+once published) – the latter moves heat to the cheaper hours ahead.
 It needs a price list – supported sources and a helper for the core Nord Pool integration are in
 [Helpery.md](Helpery.md#-spot-price-sensor-and-price-list). Some sources still need testers.
 

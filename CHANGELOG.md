@@ -14,6 +14,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   works with any currency and price level. Default stays `absolute`. Falls back to the absolute
   formula when fewer than 20 hourly prices are known. In relative mode pre-heating uses "cheaper
   than today's average" instead of the fixed 2.5.
+  `spot_reference` chooses what to compare with: *today's average* (default) or *upcoming prices* –
+  the average of the known prices for the next 24 h (incl. tomorrow once published), better for
+  moving heat to cheaper hours ahead; falls back to today's average with fewer than 8 hours.
+  Idea by TheMiZMiZ (#14).
 - **Price list from more integrations:** CZ Energy Spot Prices (timestamp attributes – pre-heating
   never worked with it before), Nord Pool HACS, ENTSO-e, Energi Data Service and any sensor with
   `today` / `tomorrow` lists. 15-minute prices are averaged per hour. New optional input
