@@ -23,7 +23,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   `today` / `tomorrow` lists. 15-minute prices are averaged per hour. New optional input
   *📋 Price list sensor*. Helpery.md has a helper sensor for the core Nord Pool integration
   (`nordpool.get_prices_for_date`, refreshed hourly, MWh → kWh).
-  **Testers wanted** for Nord Pool HACS, ENTSO-e, Energi Data Service and Tibber & co.
+  Tested on real data: CZ Energy Spot Prices, core Nord Pool (helper), Nord Pool HACS (15-min).
+  **Testers wanted** for ENTSO-e, Energi Data Service and Tibber & co.
 - **DM guard with hysteresis** (`dm_guard_*`, off by default): when degree minutes fall below the
   threshold the offset is capped (default −2) until they recover above the release threshold. The
   cap is written even inside the write interval and dead band. Shown in the status

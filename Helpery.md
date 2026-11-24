@@ -71,6 +71,10 @@ threshold higher (e.g. −200), so the offset doesn't flip back and forth.
 > cap while DM is below the release threshold"* – so the cap can also show up at e.g. DM −250 when the
 > offset was already −2 because of price or indoor temperature. That is intended (a bit safer).
 
+> ⚠️ The DM guard only stops the **blueprint** from pushing DM down. When the compressor already runs
+> at full capacity and the house needs more heat than it can deliver (e.g. cold brine), DM keeps
+> falling and the heater starts anyway – then only the pump's own degree minute settings help.
+
 ---
 
 ### 🔹 Spot price sensor and price list
@@ -86,12 +90,12 @@ threshold higher (e.g. −200), so the offset doesn't flip back and forth.
 | CZ Energy Spot Prices | timestamp attributes (`2026-11-23T00:00:00+01:00: 4.58`) | ✅ tested (live) |
 | Nord Pool – core integration | **no price list** → use the helper sensor below | ✅ tested (real data, SE3) |
 | Own template sensor with `today` / `tomorrow` lists | `today`, `tomorrow` | ✅ tested |
-| Nord Pool (HACS) | `raw_today` / `today` | 🧪 **testers wanted** |
+| Nord Pool (HACS) | `raw_today` / `today` (15-min prices) | ✅ tested (real data, SE3) |
 | ENTSO-e (HACS) | `prices_today` / `prices_tomorrow` | 🧪 **testers wanted** |
 | Energi Data Service (HACS) | `raw_today` / `today` | 🧪 **testers wanted** |
 | Tibber, Octopus, Amber, … | not built in – a helper sensor with `today` / `tomorrow` lists works | 🧪 **testers wanted** |
 
-> 🧪 **Testers wanted:** the formats marked above were implemented from the integrations' source code,
+> 🧪 **Testers wanted:** the formats marked 🧪 were implemented from the integrations' source code,
 > not tested on real data. If you use one of them, please check the debug payload
 > (`input_sensors.price_list`: `source`, `hours_today` should be 24) and report in
 > [issue #5](https://github.com/Samot89/Smart-NIBE-Control-HA-Modbus-MQTT-myUplink/issues/5) – thanks!
