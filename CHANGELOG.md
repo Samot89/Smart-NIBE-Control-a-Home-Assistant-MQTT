@@ -6,7 +6,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
-## [v4.13] – 2026-11-23
+## [v4.13] – 2026-11-24
 
 ### Added
 - **Relative spot mode** (`spot_mode: relative`, `spot_k`, #5): the spot price influence compares
