@@ -290,15 +290,16 @@ the phone and a detailed one to Telegram.
 holds the current offset instead (shown in the status, e.g. *"Holding at -1 – unavailable: indoor
 temperature stale (420 min)"*):
 - spot price, indoor temperature, degree minutes or the weather temperature **unavailable**
-- **out of range** – indoor outside 5–35 °C, outdoor outside −45…45 °C (broken sensor)
-- **stale** – not reported for longer than *🧯 Sensor watchdog – max. age* (default 6 h), e.g. a
-  sensor with a dead battery that keeps showing its last value
+- optional, with *🧯 Sensor watchdog* switched on (off by default):
+  - **out of range** – indoor outside 5–35 °C, outdoor outside −45…45 °C (broken sensor)
+  - **stale** – not reported for longer than *max. age* (default 6 h), e.g. a sensor with a dead
+    battery that keeps showing its last value
 - current offset unavailable, new offset not yet confirmed by the pump (myUplink delay)
 - plus the limits: min/max offset, max. 2 steps per write, dead band, minimum write interval
 
 And the heat pump keeps all its own protections – the blueprint only shifts the curve within your limits.
 
-**What the blueprint can't do: notice that it stopped running itself.** If the automation is switched
+**What the blueprint can't do: notice that it stopped running itself.** The automation below is optional too. If the automation is switched
 off, keeps failing or Home Assistant had a problem, the last written offset simply stays in the pump –
 possibly a high one from a cheap night. This separate automation watches it, sets a safe offset and
 notifies you:
