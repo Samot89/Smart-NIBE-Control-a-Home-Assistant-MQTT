@@ -404,7 +404,9 @@ mqtt:
     - name: "NIBE Offset Debug"
       unique_id: nibe_offset_debug
       state_topic: "nibe/debug/offset_calc"
-      value_template: "{{ value_json.offset.final }}"
+      # final is null while the current offset is unavailable and no history exists – keep the last value
+      value_template: >-
+        {{ value_json.offset.final if value_json.offset.final is number else states('sensor.nibe_offset_debug') }}
       unit_of_measurement: "offset"
       icon: mdi:thermometer-lines
       json_attributes_topic: "nibe/debug/offset_calc"
@@ -426,7 +428,9 @@ mqtt:
     - name: NIBE Final Offset
       unique_id: nibe_offset_final
       state_topic: "nibe/debug/offset_calc"
-      value_template: "{{ value_json.offset.final | default(0) }}"
+      # keep the last value instead of showing 0 / unknown while the current offset is unavailable
+      value_template: >-
+        {{ value_json.offset.final if value_json.offset.final is number else states('sensor.nibe_final_offset') }}
       icon: mdi:target
 
     - name: NIBE Offset Change

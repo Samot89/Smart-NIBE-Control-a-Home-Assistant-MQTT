@@ -6,6 +6,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [v4.14.2] – 2026-11-25
+
+### Changed
+- Status and history show when a change was **limited by the step limit**, e.g.
+  *"Raising offset -2 → -1 (calculated -0.11, target 0, max 1 step – DM -850)"* – below −800 degree
+  minutes the offset moves max. 1 step per write (#16).
+
+### Fixed
+- Debug payload: while the current offset is unavailable (e.g. myUplink dropping out) `offset.final`
+  / `offset.current` showed 0. They now carry the last written offset (from the history), or `null`
+  without history; new `offset.current_available`. Helpery.md: *NIBE Final Offset* and *NIBE Offset
+  Debug* keep their last value instead of 0 / unknown – update the templates in your `mqtt.yaml` (#11).
+
+---
+
 ## [v4.14.1] – 2026-11-24
 
 ### Changed
