@@ -6,6 +6,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [v4.15] – 2026-11-26
+
+### Added
+- **Solar forecast sensor** (optional, #17): solar braking can follow a PV production forecast
+  (Forecast.Solar `sensor.energy_next_hour` / `…_today_remaining`, Solcast, …) instead of the fixed
+  "9–15 h + sunny/cloudy" rule – smoothly up to −1.0 at *Solar forecast for full braking*
+  (default 2 kWh), at any time of day. Status shows e.g. *"solar gain expected (1.2 kWh forecast) -0.60"*.
+  Without the sensor (or when it is unavailable) nothing changes. Idea by TheMiZMiZ.
+
+---
+
 ## [v4.14.2] – 2026-11-25
 
 ### Changed

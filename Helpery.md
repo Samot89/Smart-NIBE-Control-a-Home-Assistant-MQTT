@@ -159,6 +159,28 @@ sensor stays your Nord Pool current price sensor).
 
 ---
 
+### 🔹 Optional: solar forecast sensor (v4.15)
+
+Without it, solar braking is a simple rule: 9–15 h, −1.0 when the weather entity says sunny/clear,
+−0.5 when cloudy. With a **PV production forecast** the braking follows the expected sun instead –
+smoothly, at any time of day, summer and winter alike:
+
+```
+solar_malus = −min(forecast / full_value, 1)      e.g. 1.2 kWh next hour, full 2 kWh → −0.60
+```
+
+| Integration | Sensor | Full braking at |
+|---|---|---|
+| Forecast.Solar (core) | `sensor.energy_next_hour` (recommended) | ≈ 40 % of your kWp (5 kWp → 2 kWh) |
+| Forecast.Solar (core) | `sensor.energy_production_today_remaining` | ≈ 3× that (5 kWp → 6 kWh) |
+| Solcast (HACS) | forecast next hour / remaining today | same as above |
+
+The sun heats the house through the windows, not through the panels, so the right value depends on
+your house – start with the suggestion and adjust if the house still overheats on sunny days (lower
+the value) or gets too cool (raise it). If the sensor is unavailable, the simple rule is used.
+
+---
+
 ### 🔹 Cheapest block (e.g. 6 hours)
 
 `sensor.cheapest_6h_block`

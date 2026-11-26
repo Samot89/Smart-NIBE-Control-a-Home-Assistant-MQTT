@@ -1,5 +1,5 @@
 blueprint:
-  name: Smart NIBE – Adaptive Heat Curve Control (MQTT/Modbus or myUplink) v4.14.2
+  name: Smart NIBE – Adaptive Heat Curve Control (MQTT/Modbus or myUplink) v4.15
   description: |
     Adaptive control of a NIBE heat pump: smoothly adjusts the heat curve offset
     (register 47011) – never switches the compressor on/off.
@@ -123,6 +123,31 @@ blueprint:
       selector:
         entity:
           domain: input_number
+
+    solar_forecast:
+      name: ☀️ Solar forecast sensor (optional)
+      description: >
+        PV production forecast in kWh, e.g. Forecast.Solar `sensor.energy_next_hour` (best) or
+        `sensor.energy_production_today_remaining`, or a Solcast sensor. When set, it replaces the
+        simple "9–15 h + sunny/cloudy weather" rule: the solar braking grows smoothly with the
+        forecast, up to −1.0 at the value below. Empty = previous behaviour.
+      default: none
+      selector:
+        entity:
+          domain: sensor
+
+    solar_forecast_full:
+      name: ☀️ Solar forecast for full braking (kWh)
+      description: >
+        Forecast value at which the full solar braking (−1.0) applies; half of it gives −0.5.
+        Depends on your PV size and the sensor – e.g. about 40 % of your kWp for "next hour"
+        (5 kWp → 2 kWh), or about 3× that for "remaining today".
+      default: 2
+      selector:
+        number:
+          min: 0.1
+          max: 100
+          step: 0.1
 
     hdo:
       name: ⚡ HDO binary sensor (optional)
@@ -491,6 +516,10 @@ action:
         {% else %}0{% endif %}
       temp_indoor: "{{ states(in_temp_ent) | float(target_temp_var) }}"
       dm_value: "{{ states(dm_ent) | float(0) }}"
+      solar_fc_ent: !input solar_forecast
+      solar_fc_full: !input solar_forecast_full
+      solar_fc_set: "{{ solar_fc_ent not in [none, '', 'none'] and is_number(states(solar_fc_ent)) }}"
+      solar_fc_value: "{{ states(solar_fc_ent) | float(0) if solar_fc_set else none }}"
       dm_cap_on: !input dm_guard_enable
       dm_cap_thr: !input dm_guard_threshold
       dm_cap_rel: !input dm_guard_release
@@ -636,9 +665,11 @@ action:
           1.5
         {% else %}0.0{% endif %}
 
-      # 2. SOLAR MALUS (9:00–15:00 on sunny days)
+      # 2. SOLAR MALUS – from the PV forecast sensor (smooth, v4.15) or 9:00–15:00 on sunny days
       solar_malus: >
-        {% if 9 <= now().hour <= 15 %}
+        {% if solar_fc_set %}
+          {{ (0 - ([solar_fc_value | float / ([solar_fc_full | float, 0.1] | max), 1] | min)) | round(2) }}
+        {% elif 9 <= now().hour <= 15 %}
           {% set state = weather_state | lower %}
           {% if state in ['sunny', 'clear'] %}-1.0
           {% elif 'cloud' in state %}-0.5
@@ -784,7 +815,7 @@ action:
           [indoor_correction | float * gain_value | float, 'house ' ~ (temp_diff | float | abs | round(1)) ~ ' °C ' ~ ('below' if temp_diff | float < 0 else 'above') ~ ' target'],
           [cheap_block_bonus | float, 'cheapest 6h block'],
           [preheat_bonus | float, 'pre-heating before price rise'],
-          [solar_malus | float, 'solar gain expected'],
+          [solar_malus | float, 'solar gain expected' ~ ((' (' ~ ('%.1f' | format(solar_fc_value | float)) ~ ' kWh forecast)') if solar_fc_set else '')],
           [forecast_bonus | float, ('colder' if trend_value | float < 0 else 'warmer') ~ ' weather coming (' ~ (trend_value | float | round(1)) ~ ' °C in 6 h)']
         ] %}
         {# up to 3 strongest components (>= 0.3), the rest summed up as "other", so the parts add up
@@ -828,7 +859,7 @@ action:
           {
             "status": status_text,
             "metadata": {
-              "version": "4.14.2",
+              "version": "4.15",
               "timestamp": now().isoformat(),
               "components_count": 7
             },
@@ -889,6 +920,9 @@ action:
                 "6_solar_malus": {
                   "value": solar_malus | float | round(3),
                   "weather_state": weather_state,
+                  "source": "forecast sensor" if solar_fc_set else "weather 9–15 h",
+                  "forecast_kwh": solar_fc_value,
+                  "forecast_full_kwh": solar_fc_full | float,
                   "active": solar_malus | float != 0,
                   "percent_of_total": ((solar_malus | float / raw_calc * 100) if raw_calc != 0 else 0) | round(1)
                 },
